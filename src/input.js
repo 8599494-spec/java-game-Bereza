@@ -1,4 +1,4 @@
-export function createInput(target = window) {
+﻿export function createInput(target = window) {
 	const pressed = new Set();
 
 	const onKeyDown = (event) => {
@@ -26,6 +26,11 @@ export function createInput(target = window) {
 				thrust: pressed.has("KeyW") || pressed.has("ArrowUp"),
 				left: pressed.has("KeyA") || pressed.has("ArrowLeft"),
 				right: pressed.has("KeyD") || pressed.has("ArrowRight"),
+				fire: pressed.has("Space"),
+				fireHoming:
+					pressed.has("KeyE") ||
+					pressed.has("ShiftLeft") ||
+					pressed.has("ShiftRight"),
 			};
 		},
 		destroy() {
