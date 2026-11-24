@@ -415,7 +415,7 @@ export function stepWorldState(
   state.shipGrid.clear();
   for (let i = 0; i < state.ships.length; i += 1) {
     const s = state.ships[i];
-    if (s && s.alive) {
+    if (s?.alive) {
       state.shipGrid.insert(s.pos, s);
     }
   }

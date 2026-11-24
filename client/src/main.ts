@@ -261,7 +261,7 @@ function startLoops(): void {
     const remoteEntities = interpolator.sample(nowMs, localShipId);
     const localRenderShip = predictor.getRenderShip(localShipId);
 
-    if (localRenderShip && localRenderShip.alive && localRenderShip.thrusting) {
+    if (localRenderShip?.alive && localRenderShip.thrusting) {
       particles.emitExhaust(localRenderShip.pos.x, localRenderShip.pos.y, localRenderShip.angle);
     }
 
