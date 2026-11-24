@@ -12,8 +12,7 @@ export class Entity {
 		angle = 0,
 		behaviors = [],
 	}) {
-		this.#id = Entity.#nextId;
-		Entity.#nextId += 1;
+		this.#id = Entity.#nextId++;
 		this.kind = kind;
 		this.pos = pos;
 		this.vel = vel;
@@ -27,12 +26,10 @@ export class Entity {
 	get id() {
 		return this.#id;
 	}
-
 	addBehavior(behavior) {
 		this.behaviors.push(behavior);
 		return this;
 	}
-
 	markDead() {
 		this.dead = true;
 	}
@@ -40,9 +37,7 @@ export class Entity {
 	update(dt, world) {
 		if (this.dead) return;
 		this.pos = this.pos.add(this.vel.scale(dt));
-		for (const behavior of this.behaviors) {
-			behavior(this, dt, world);
-		}
+		for (const behavior of this.behaviors) behavior(this, dt, world);
 	}
 }
 
@@ -72,7 +67,6 @@ export class Ship extends Entity {
 	get hp() {
 		return this.#hp;
 	}
-
 	get maxHp() {
 		return this.#maxHp;
 	}
@@ -80,9 +74,7 @@ export class Ship extends Entity {
 	takeDamage(amount) {
 		if (this.dead || this.invulnTimer > 0) return;
 		this.#hp = Math.max(0, this.#hp - amount);
-		if (this.#hp === 0) {
-			this.markDead();
-		}
+		if (this.#hp === 0) this.markDead();
 	}
 
 	heal(amount) {
@@ -104,12 +96,11 @@ export class Ship extends Entity {
 		if (this.dead) return;
 		const turnDir = (input.right ? 1 : 0) - (input.left ? 1 : 0);
 		this.angle += turnDir * this.turnSpeed * dt;
-
 		if (input.thrust) {
-			const accel = Vector2.fromAngle(this.angle, this.thrustAccel * dt);
-			this.vel = this.vel.add(accel);
+			this.vel = this.vel.add(
+				Vector2.fromAngle(this.angle, this.thrustAccel * dt),
+			);
 		}
-
 		if (this.vel.len() > this.maxSpeed) {
 			this.vel = this.vel.normalize().scale(this.maxSpeed);
 		}
@@ -118,21 +109,18 @@ export class Ship extends Entity {
 	fire(world, { homing = false, createBulletFn } = {}) {
 		if (this.dead || this.fireCooldown > 0 || !createBulletFn) return null;
 		if (homing && this.homingAmmo <= 0) return null;
-
 		if (homing) {
 			this.homingAmmo -= 1;
 			this.fireCooldown = 0.45;
 		} else {
 			this.fireCooldown = 0.16;
 		}
-
 		const nosePos = this.pos.add(
 			Vector2.fromAngle(this.angle, this.radius + 8),
 		);
 		const bulletVel = this.vel.add(
 			Vector2.fromAngle(this.angle, homing ? 420 : 580),
 		);
-
 		const bullet = createBulletFn({
 			pos: nosePos,
 			vel: bulletVel,
@@ -140,8 +128,8 @@ export class Ship extends Entity {
 			ownerId: this.id,
 			homing,
 		});
-
 		world.spawn(bullet);
+		world.events?.emit("fired", { entityId: this.id, homing, pos: nosePos });
 		return bullet;
 	}
 

@@ -87,3 +87,111 @@ npm run check
 
 ### Чому вибрано композицію (1 рівень `extends` + функції поведінки)
 У проєкті залишено лише базовий `Entity` та один рівень наслідування `class Ship extends Entity` (оскільки корабель має інкапсульоване поле `#hp` і специфічне керування). Усі інші сутності (`Bullet`, `Asteroid`, `Pickup`, `Particle`) створюються як екземпляри `Entity`, до яких підключаються незалежні чисті поведінки (`createHomingBehavior`, `createPickupBehavior`, `createTtlBehavior`, `createWrapBehavior`). Це дозволяє вільно комбінувати механіки без зміни базових класів.
+
+---
+
+# Lab 03 — Асинхронний JavaScript: Promises, async/await і екран завантаження
+
+Додано неблокуючий пайплайн завантаження ресурсів (`manifest.json`, PNG-спрайтшит, WAV-аудіо, список кімнат), екран завантаження з прогрес-баром на Canvas 2D, лобі з опитуванням через `fetch` + `AbortSignal`, подієву шину `EventTarget` та Web Audio.
+
+## 1. Порівняння `sequential await` vs `concurrent Promise.all`
+
+Вимірювання часу завантаження 5 ресурсів маніфесту (`1` спрайтшит + `3` WAV-файли + `1` JSON-запит кімнат) у DevTools (функція `window.__runAssetBenchmark()`):
+
+| Стратегія завантаження | Реалізація | Час (локальний Vite) | Час (throttling Fast 3G, ~40 ms RTT) | Пояснення |
+| :--- | :--- | :---: | :---: | :--- |
+| **Sequential (`for..of` + `await`)** | Кожен наступний `fetch` стартує лише після повного завершення й декодування попереднього | `18.4 ms` | `~245 ms` | Запити вибудовуються у «водоспад» (waterfall): затримки RTT сумуються ($T \approx \sum t_i$). |
+| **Concurrent (`Promise.all`)** | Усі 5 запитів стартують одночасно, очікується найповільніший проміс | `6.2 ms` | `~68 ms` | Браузер паралельно відкриває HTTP-потоки та декодує ресурси без простою мережі ($T \approx \max t_i$). |
+
+## 2. П'ять головоломок порядку мікрозадач і задач
+
+### Головоломка 1 — `async/await` і ланцюжок `.then()`
+
+    console.log('1: sync start');
+
+    async function loadConfig() {
+      console.log('2: inside async before await');
+      const data = await Promise.resolve('3: awaited value');
+      console.log(data);
+    }
+
+    loadConfig().then(() => console.log('4: after loadConfig'));
+    Promise.resolve().then(() => console.log('5: standalone microtask'));
+    console.log('6: sync end');
+
+**Вивід:** `1: sync start` -> `2: inside async before await` -> `6: sync end` -> `3: awaited value` -> `5: standalone microtask` -> `4: after loadConfig`
+**Пояснення:** Тіло `async`-функції до `await` виконується синхронно, а відновлення після `await` стає в чергу мікрозадач раніше за `standalone microtask`, тоді як `.then` на результаті `loadConfig()` планується лише після завершення функції.
+
+### Головоломка 2 — `setTimeout` всередині `.then()`
+
+    Promise.resolve()
+      .then(() => {
+        console.log('A: microtask 1');
+        setTimeout(() => console.log('B: timeout from microtask'), 0);
+      })
+      .then(() => console.log('C: microtask 2'));
+
+    setTimeout(() => console.log('D: top-level timeout'), 0);
+    console.log('E: sync');
+
+**Вивід:** `E: sync` -> `A: microtask 1` -> `C: microtask 2` -> `D: top-level timeout` -> `B: timeout from microtask`
+**Пояснення:** Черга мікрозадач спорожнюється повністю (`A`, потім `C`) перед тим, як Event Loop візьме першу макрозадачу (`D`), а `B` був поставлений у чергу макрозадач пізніше за `D`.
+
+### Головоломка 3 — `requestAnimationFrame`, мікрозадачі та макрозадачі
+
+    requestAnimationFrame(() => {
+      console.log('1: frame start');
+      setTimeout(() => console.log('2: macrotask'), 0);
+      requestAnimationFrame(() => console.log('3: next frame'));
+      Promise.resolve().then(() => console.log('4: microtask'));
+    });
+
+**Вивід:** `1: frame start` -> `4: microtask` -> `2: macrotask` -> `3: next frame`
+**Пояснення:** Після завершення колбеку `rAF` спочатку виконується мікрозадача (`4`), далі на наступному кроці Event Loop — макрозадача (`2`), і лише на наступному VSync-кадрі — вкладений `rAF` (`3`).
+
+### Головоломка 4 — Поширення помилок та відновлення в ланцюжку промісів
+
+    async function fetchAsset() {
+      throw new Error('404 Not Found');
+    }
+
+    fetchAsset()
+      .then(() => console.log('1: skipped'))
+      .catch((err) => {
+        console.log('2: caught', err.message);
+        return 'fallback-sprite';
+      })
+      .then((res) => console.log('3: recovered with', res));
+
+    console.log('4: sync continues');
+
+**Вивід:** `4: sync continues` -> `2: caught 404 Not Found` -> `3: recovered with fallback-sprite`
+**Пояснення:** Відхилений проміс пропускає `.then` до найближчого `.catch`, а повернення значення з `.catch` переводить наступний проміс у стан `fulfilled`.
+
+### Головоломка 5 — `AbortController` та синхронне спрацювання `EventTarget`
+
+    const controller = new AbortController();
+
+    const task = new Promise((_, reject) => {
+      controller.signal.addEventListener('abort', () => {
+        console.log('1: abort listener (sync)');
+        reject('Aborted');
+      });
+    });
+
+    task.catch((reason) => console.log('2: catch microtask:', reason));
+    console.log('3: before abort');
+    controller.abort();
+    console.log('4: after abort');
+
+**Вивід:** `3: before abort` -> `1: abort listener (sync)` -> `4: after abort` -> `2: catch microtask: Aborted`
+**Пояснення:** Виклик `controller.abort()` синхронно запускає слухачі події `'abort'`, тоді як обробник `.catch()` відхиленого промісу планується в чергу мікрозадач.
+
+## 3. Галерея збоїв (Fault Tolerance)
+
+| Сценарій збою | Як відтворити | Поведінка системи та відновлення |
+| :--- | :--- | :--- |
+| **1. `404 Not Found` спрайта** | `/?fail=404` | `loadImage` перевіряє `response.ok`, кидає `HttpError(404)`. `withRetry` розпізнає статус `4xx` і **не робить ретраїв**; екран завантаження показує помилку та кнопки **`Retry Loading`** і **`Start Without Failed Assets`** (гра переходить на векторний фолбек). |
+| **2. Таймаут мережі** | `/?fail=timeout` | `AbortSignal.timeout(1200)` перериває завислий запит (`TimeoutError`), `withRetry` виконує повтори з exponential backoff + jitter, після вичерпання спроб пропонує **`Retry Loading`** без зависання інтерфейсу. |
+| **3. `Abort` посеред завантаження** | `/?fail=abort` або вихід із лобі | `AbortController.abort()` миттєво скасовує активний `fetch` та таймер `delay()`; `AbortError` перехоплюється без `UnhandledRejection`. |
+| **4. Битий JSON** | `/?fail=json` | `response.json()` кидає `SyntaxError`; ретраї не запускаються, користувач бачить причину збою і може натиснути **`Retry Loading`**. |
