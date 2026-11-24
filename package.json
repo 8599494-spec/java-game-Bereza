@@ -1,6 +1,6 @@
 {
   "name": "java-game-bereza",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "private": true,
   "type": "module",
   "workspaces": [
@@ -14,16 +14,23 @@
     "build": "npm --workspace=client run build",
     "start": "npm --workspace=server run start",
     "typecheck": "npm --workspace=shared run typecheck && npm --workspace=server run typecheck && npm --workspace=client run typecheck",
-    "test": "node --test shared/test/*.test.ts",
+    "lint": "biome check ./shared/src ./shared/test ./shared/scripts ./client/src ./client/test ./server/src ./server/test ./server/scripts ./e2e",
+    "check": "biome check --write ./shared/src ./shared/test ./shared/scripts ./client/src ./client/test ./server/src ./server/test ./server/scripts ./e2e",
+    "test": "vitest run",
+    "test:coverage": "vitest run --coverage",
+    "test:e2e": "playwright test",
     "bench:codec": "node shared/scripts/bench-codec.ts",
-    "bench:rss": "node server/scripts/bench-stream-rss.mjs",
-    "gen:gif": "node shared/scripts/generate-demo-gif.ts",
-    "check": "biome check --write ./shared/src ./shared/test ./shared/scripts ./client/src ./server/src ./server/scripts"
+    "bench:perf": "node shared/scripts/bench-perf.ts",
+    "load:test": "node server/scripts/load-test.ts"
   },
   "devDependencies": {
     "@biomejs/biome": "^1.9.4",
+    "@playwright/test": "^1.50.0",
     "@types/node": "^22.0.0",
-    "typescript": "^5.7.0"
+    "@vitest/coverage-v8": "^3.0.0",
+    "fast-check": "^3.23.0",
+    "typescript": "^5.7.0",
+    "vitest": "^3.0.0"
   },
   "dependencies": {
     "zod": "^3.24.0"

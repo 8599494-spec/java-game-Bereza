@@ -17,7 +17,7 @@
 
 body {
   margin: 0;
-  font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+  font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
   background: radial-gradient(circle at top, #0f172a 0%, var(--bg) 70%);
   color: var(--text);
   min-height: 100vh;
@@ -95,7 +95,8 @@ body {
   color: var(--muted);
 }
 
-.join-form input {
+.join-form input,
+.chat-form input {
   padding: 9px 12px;
   border-radius: 8px;
   border: 1px solid var(--border);
@@ -106,13 +107,13 @@ body {
 
 button {
   cursor: pointer;
-  padding: 9px 14px;
+  padding: 8px 12px;
   border-radius: 8px;
   border: 1px solid var(--border);
   background: #172338;
   color: var(--text);
   font-weight: 600;
-  font-size: 13px;
+  font-size: 12px;
 }
 
 button:hover {
@@ -124,6 +125,7 @@ button:hover {
   color: #04101d;
   border: none;
   margin-top: 4px;
+  font-size: 14px;
 }
 
 .hint {
@@ -160,7 +162,7 @@ button:hover {
   right: 10px;
   border-radius: 8px;
   border: 1px solid rgba(56, 189, 248, 0.25);
-  background: rgba(6, 11, 20, 0.84);
+  background: rgba(6, 11, 20, 0.86);
   pointer-events: none;
 }
 
@@ -181,7 +183,7 @@ button:hover {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 14px;
+  gap: 10px;
 }
 
 .control-group label {
@@ -192,8 +194,8 @@ button:hover {
   gap: 4px;
 }
 
-.control-group input[type="range"] {
-  width: 110px;
+.control-group input[type='range'] {
+  width: 95px;
 }
 
 .toggle.active {
@@ -205,4 +207,61 @@ button:hover {
 button.danger {
   border-color: rgba(239, 68, 68, 0.45);
   color: #fecaca;
+}
+
+.social-grid {
+  margin-top: 12px;
+  display: grid;
+  grid-template-columns: 260px 1fr;
+  gap: 12px;
+}
+
+.panel-box {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px 12px;
+}
+
+.panel-box h3 {
+  margin: 0 0 8px;
+  font-size: 13px;
+  color: var(--accent);
+}
+
+.roster-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-height: 120px;
+  overflow-y: auto;
+  font-size: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.chat-messages {
+  height: 86px;
+  overflow-y: auto;
+  background: #09101d;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 6px 8px;
+  font-size: 12px;
+  margin-bottom: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.chat-form {
+  display: flex;
+  gap: 8px;
+}
+
+.chat-form input {
+  flex: 1;
+  padding: 6px 10px;
+  font-size: 12px;
 }

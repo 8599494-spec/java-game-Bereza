@@ -1,5 +1,13 @@
 import { z } from 'zod';
-import { type ParseResult, type Radians, asEntityId, asRadians, asRoomId, asSeq, asTick } from './types.ts';
+import {
+  asEntityId,
+  asRadians,
+  asRoomId,
+  asSeq,
+  asTick,
+  type ParseResult,
+  type Radians,
+} from './types.ts';
 
 export const PROTOCOL_VERSION = 1 as const;
 
@@ -65,17 +73,24 @@ export const NetConfigMessageSchema = z.object({
   codec: CodecKindSchema.optional(),
 });
 
+export const ChatClientMessageSchema = z.object({
+  type: z.literal('chat'),
+  text: z.string().trim().min(1).max(160),
+});
+
 export const ClientMessageSchema = z.discriminatedUnion('type', [
   JoinMessageSchema,
   InputMessageSchema,
   PingMessageSchema,
   NetConfigMessageSchema,
+  ChatClientMessageSchema,
 ]);
 
 export type JoinMessage = z.infer<typeof JoinMessageSchema>;
 export type InputMessage = z.infer<typeof InputMessageSchema>;
 export type PingMessage = z.infer<typeof PingMessageSchema>;
 export type NetConfigMessage = z.infer<typeof NetConfigMessageSchema>;
+export type ChatClientMessage = z.infer<typeof ChatClientMessageSchema>;
 export type ClientMessage = z.infer<typeof ClientMessageSchema>;
 
 export const ShipSnapshotEntitySchema = z.object({
@@ -146,11 +161,19 @@ export const ErrorMessageSchema = z.object({
   message: z.string(),
 });
 
+export const ChatServerMessageSchema = z.object({
+  type: z.literal('chat'),
+  fromShipId: EntityIdSchema,
+  fromName: z.string(),
+  text: z.string(),
+});
+
 export const ServerMessageSchema = z.discriminatedUnion('type', [
   WelcomeMessageSchema,
   SnapshotMessageSchema,
   PongMessageSchema,
   ErrorMessageSchema,
+  ChatServerMessageSchema,
 ]);
 
 export type ShipSnapshotEntity = z.infer<typeof ShipSnapshotEntitySchema>;
@@ -161,14 +184,13 @@ export type SnapshotMessage = z.infer<typeof SnapshotMessageSchema>;
 export type WelcomeMessage = z.infer<typeof WelcomeMessageSchema>;
 export type PongMessage = z.infer<typeof PongMessageSchema>;
 export type ErrorMessage = z.infer<typeof ErrorMessageSchema>;
+export type ChatServerMessage = z.infer<typeof ChatServerMessageSchema>;
 export type ServerMessage = z.infer<typeof ServerMessageSchema>;
 
 export function parseClientMessage(raw: unknown): ParseResult<ClientMessage> {
   const parsed = ClientMessageSchema.safeParse(raw);
   if (!parsed.success) {
-    const details = parsed.error.issues
-      .map((issue) => `${issue.path.join('.')}: ${issue.message}`)
-      .join('; ');
+    const details = parsed.error.issues.map((issue) => `${issue.path.join('.')}: ${issue.message}`).join('; ');
     return { ok: false, error: details || 'Invalid client message' };
   }
   return { ok: true, value: parsed.data };
@@ -177,9 +199,7 @@ export function parseClientMessage(raw: unknown): ParseResult<ClientMessage> {
 export function parseServerMessage(raw: unknown): ParseResult<ServerMessage> {
   const parsed = ServerMessageSchema.safeParse(raw);
   if (!parsed.success) {
-    const details = parsed.error.issues
-      .map((issue) => `${issue.path.join('.')}: ${issue.message}`)
-      .join('; ');
+    const details = parsed.error.issues.map((issue) => `${issue.path.join('.')}: ${issue.message}`).join('; ');
     return { ok: false, error: details || 'Invalid server message' };
   }
   return { ok: true, value: parsed.data };

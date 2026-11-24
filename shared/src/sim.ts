@@ -1,17 +1,24 @@
-import { type Prng, createPrng } from './prng.ts';
-import { type SnapshotEntity, type SnapshotMessage, normalizeAngle } from './protocol.ts';
+import { ObjectPool } from './pool.ts';
+import { createPrng, type Prng } from './prng.ts';
 import {
-  type EntityId,
-  type Radians,
-  type Seq,
-  type Tick,
-  type Vector2,
-  ZERO_VEC2,
+  normalizeAngle,
+  type SnapshotEntity,
+  type SnapshotMessage,
+} from './protocol.ts';
+import { SpatialHash } from './spatialHash.ts';
+import {
   asEntityId,
   asRadians,
   asSeq,
   asTick,
-  vec2,
+  type EntityId,
+  type MutVec2,
+  mutVec2,
+  type Radians,
+  type Seq,
+  setVec2,
+  type Tick,
+  type Vector2,
 } from './types.ts';
 
 export interface ArenaBounds {
@@ -71,8 +78,8 @@ export interface SimShip {
   readonly id: EntityId;
   name: string;
   readonly slotIndex: number;
-  pos: Vector2;
-  vel: Vector2;
+  readonly pos: MutVec2;
+  readonly vel: MutVec2;
   angle: Radians;
   hp: number;
   readonly maxHp: number;
@@ -87,20 +94,21 @@ export interface SimShip {
 
 export interface SimAsteroid {
   readonly id: EntityId;
-  pos: Vector2;
-  vel: Vector2;
+  readonly pos: MutVec2;
+  readonly vel: MutVec2;
   angle: Radians;
   readonly radius: number;
   readonly homing: boolean;
 }
 
 export interface SimBullet {
-  readonly id: EntityId;
-  readonly ownerId: EntityId;
-  pos: Vector2;
-  vel: Vector2;
+  active: boolean;
+  id: EntityId;
+  ownerId: EntityId;
+  readonly pos: MutVec2;
+  readonly vel: MutVec2;
   angle: Radians;
-  readonly homing: boolean;
+  homing: boolean;
   ttl: number;
 }
 
@@ -114,12 +122,38 @@ export interface WorldState {
   ships: SimShip[];
   asteroids: SimAsteroid[];
   bullets: SimBullet[];
+  readonly bulletPool: ObjectPool<SimBullet>;
+  readonly asteroidGrid: SpatialHash<SimAsteroid>;
+  readonly shipGrid: SpatialHash<SimShip>;
 }
 
 export type SimEvent =
   | { readonly type: 'fire'; readonly shipId: EntityId }
   | { readonly type: 'hit'; readonly targetId: EntityId }
   | { readonly type: 'exploded'; readonly targetId: EntityId; readonly score: number };
+
+function createBlankBullet(): SimBullet {
+  return {
+    active: false,
+    id: asEntityId(0),
+    ownerId: asEntityId(0),
+    pos: mutVec2(0, 0),
+    vel: mutVec2(0, 0),
+    angle: asRadians(0),
+    homing: false,
+    ttl: 0,
+  };
+}
+
+function resetBullet(b: SimBullet): void {
+  b.id = asEntityId(0);
+  b.ownerId = asEntityId(0);
+  setVec2(b.pos, 0, 0);
+  setVec2(b.vel, 0, 0);
+  b.angle = asRadians(0);
+  b.homing = false;
+  b.ttl = 0;
+}
 
 export function integrateShip(
   ship: SimShip,
@@ -159,8 +193,9 @@ export function integrateShip(
     vy *= k;
   }
 
-  ship.vel = vec2(vx, vy);
-  ship.pos = vec2(
+  setVec2(ship.vel, vx, vy);
+  setVec2(
+    ship.pos,
     wrapCoord(ship.pos.x + vx * dt, arena.width),
     wrapCoord(ship.pos.y + vy * dt, arena.height),
   );
@@ -199,8 +234,8 @@ function spawnAsteroidWithRng(
 
   return {
     id,
-    pos: vec2(x, y),
-    vel: vec2(Math.cos(angle) * speed, Math.sin(angle) * speed),
+    pos: mutVec2(x, y),
+    vel: mutVec2(Math.cos(angle) * speed, Math.sin(angle) * speed),
     angle,
     radius: homing ? 20 : 25,
     homing,
@@ -221,6 +256,7 @@ export function createWorldState({
   arena = ARENA,
 }: CreateWorldOptions = {}): WorldState {
   const rng = createPrng(seed);
+  const bulletPool = new ObjectPool<SimBullet>(createBlankBullet, resetBullet, 128);
   const state: WorldState = {
     tick: asTick(0),
     seed: seed >>> 0,
@@ -231,6 +267,9 @@ export function createWorldState({
     ships: [],
     asteroids: [],
     bullets: [],
+    bulletPool,
+    asteroidGrid: new SpatialHash<SimAsteroid>(arena.width, arena.height, 90),
+    shipGrid: new SpatialHash<SimShip>(arena.width, arena.height, 90),
   };
 
   for (let i = 0; i < asteroidCount; i += 1) {
@@ -262,8 +301,8 @@ export function addShipToWorld(
     id,
     name: name || `Pilot-${id}`,
     slotIndex,
-    pos: vec2(sp.x, sp.y),
-    vel: ZERO_VEC2,
+    pos: mutVec2(sp.x, sp.y),
+    vel: mutVec2(0, 0),
     angle: asRadians(sp.angle),
     hp: 100,
     maxHp: 100,
@@ -283,6 +322,9 @@ export function removeShipFromWorld(state: WorldState, shipId: EntityId): void {
   state.ships = state.ships.filter((s) => s.id !== shipId);
 }
 
+const nearbyShipsScratch: SimShip[] = [];
+const nearbyAsteroidsScratch: SimAsteroid[] = [];
+
 export function stepWorldState(
   state: WorldState,
   inputsByShipId: ReadonlyMap<EntityId, ShipControlInput> | null | undefined,
@@ -293,7 +335,10 @@ export function stepWorldState(
   const events: SimEvent[] = [];
   state.tick = asTick(state.tick + 1);
 
-  for (const ship of state.ships) {
+  for (let i = 0; i < state.ships.length; i += 1) {
+    const ship = state.ships[i];
+    if (!ship) continue;
+
     const input = inputsByShipId?.get(ship.id) ?? null;
     if (input?.seq !== undefined) {
       ship.lastProcessedSeq = input.seq;
@@ -304,8 +349,8 @@ export function stepWorldState(
       if (ship.respawnTimer <= 0) {
         ship.alive = true;
         ship.hp = ship.maxHp;
-        ship.vel = ZERO_VEC2;
-        ship.pos = vec2(rng.range(120, arena.width - 120), rng.range(100, arena.height - 100));
+        setVec2(ship.vel, 0, 0);
+        setVec2(ship.pos, rng.range(120, arena.width - 120), rng.range(100, arena.height - 100));
         ship.invulnTimer = 1.5;
       }
       continue;
@@ -319,28 +364,34 @@ export function stepWorldState(
       ship.fireCooldown = isHoming ? 0.42 : 0.2;
       const noseX = wrapCoord(ship.pos.x + Math.cos(ship.angle) * (SHIP_RADIUS + 8), arena.width);
       const noseY = wrapCoord(ship.pos.y + Math.sin(ship.angle) * (SHIP_RADIUS + 8), arena.height);
-      state.bullets.push({
-        id: asEntityId(state.nextEntityId++),
-        ownerId: ship.id,
-        pos: vec2(noseX, noseY),
-        vel: vec2(
-          ship.vel.x * 0.35 + Math.cos(ship.angle) * BULLET_SPEED,
-          ship.vel.y * 0.35 + Math.sin(ship.angle) * BULLET_SPEED,
-        ),
-        angle: ship.angle,
-        homing: isHoming,
-        ttl: BULLET_TTL,
-      });
+
+      const bullet = state.bulletPool.acquire();
+      bullet.id = asEntityId(state.nextEntityId++);
+      bullet.ownerId = ship.id;
+      setVec2(bullet.pos, noseX, noseY);
+      setVec2(
+        bullet.vel,
+        ship.vel.x * 0.35 + Math.cos(ship.angle) * BULLET_SPEED,
+        ship.vel.y * 0.35 + Math.sin(ship.angle) * BULLET_SPEED,
+      );
+      bullet.angle = ship.angle;
+      bullet.homing = isHoming;
+      bullet.ttl = BULLET_TTL;
+      state.bullets.push(bullet);
       events.push({ type: 'fire', shipId: ship.id });
     }
   }
 
-  for (const ast of state.asteroids) {
+  for (let i = 0; i < state.asteroids.length; i += 1) {
+    const ast = state.asteroids[i];
+    if (!ast) continue;
+
     if (ast.homing && state.ships.length > 0) {
       let nearest: SimShip | null = null;
-      let bestDist = Number.POSITIVE_INFINITY;
-      for (const s of state.ships) {
-        if (!s.alive) continue;
+      let bestDist = Infinity;
+      for (let j = 0; j < state.ships.length; j += 1) {
+        const s = state.ships[j];
+        if (!s || !s.alive) continue;
         const d = wrapDistance(ast.pos, s.pos, arena);
         if (d < bestDist) {
           bestDist = d;
@@ -354,27 +405,52 @@ export function stepWorldState(
         const diff = normalizeAngle(desiredAngle - ast.angle);
         ast.angle = normalizeAngle(ast.angle + Math.max(-1.4 * dt, Math.min(1.4 * dt, diff)));
         const speed = Math.hypot(ast.vel.x, ast.vel.y);
-        ast.vel = vec2(Math.cos(ast.angle) * speed, Math.sin(ast.angle) * speed);
+        setVec2(ast.vel, Math.cos(ast.angle) * speed, Math.sin(ast.angle) * speed);
       }
     }
-    ast.pos = vec2(
+    setVec2(
+      ast.pos,
       wrapCoord(ast.pos.x + ast.vel.x * dt, arena.width),
       wrapCoord(ast.pos.y + ast.vel.y * dt, arena.height),
     );
   }
 
-  const survivingBullets: SimBullet[] = [];
-  const destroyedAsteroidIds = new Set<EntityId>();
+  // Rebuild spatial hash grids once per tick (zero allocation)
+  state.shipGrid.clear();
+  for (let i = 0; i < state.ships.length; i += 1) {
+    const s = state.ships[i];
+    if (s && s.alive) {
+      state.shipGrid.insert(s.pos, s);
+    }
+  }
 
-  for (const b of state.bullets) {
+  state.asteroidGrid.clear();
+  for (let i = 0; i < state.asteroids.length; i += 1) {
+    const a = state.asteroids[i];
+    if (a) {
+      state.asteroidGrid.insert(a.pos, a);
+    }
+  }
+
+  const destroyedAsteroidIds = new Set<EntityId>();
+  let writeIdx = 0;
+
+  for (let i = 0; i < state.bullets.length; i += 1) {
+    const b = state.bullets[i];
+    if (!b) continue;
+
     b.ttl -= dt;
-    if (b.ttl <= 0) continue;
+    if (b.ttl <= 0) {
+      state.bulletPool.release(b);
+      continue;
+    }
 
     if (b.homing) {
       let target: SimShip | null = null;
       let bestDist = 340;
-      for (const s of state.ships) {
-        if (!s.alive || s.id === b.ownerId) continue;
+      for (let j = 0; j < state.ships.length; j += 1) {
+        const s = state.ships[j];
+        if (!s || !s.alive || s.id === b.ownerId) continue;
         const d = wrapDistance(b.pos, s.pos, arena);
         if (d < bestDist) {
           bestDist = d;
@@ -387,19 +463,22 @@ export function stepWorldState(
         const desired = Math.atan2(dy, dx);
         const diff = normalizeAngle(desired - b.angle);
         b.angle = normalizeAngle(b.angle + Math.max(-4.5 * dt, Math.min(4.5 * dt, diff)));
-        b.vel = vec2(Math.cos(b.angle) * BULLET_SPEED, Math.sin(b.angle) * BULLET_SPEED);
+        setVec2(b.vel, Math.cos(b.angle) * BULLET_SPEED, Math.sin(b.angle) * BULLET_SPEED);
       }
     }
 
-    b.pos = vec2(
+    setVec2(
+      b.pos,
       wrapCoord(b.pos.x + b.vel.x * dt, arena.width),
       wrapCoord(b.pos.y + b.vel.y * dt, arena.height),
     );
 
     let consumed = false;
 
-    for (const s of state.ships) {
-      if (!s.alive || s.id === b.ownerId || s.invulnTimer > 0) continue;
+    const candidateShips = state.shipGrid.queryRadius(b.pos, SHIP_RADIUS + 8, nearbyShipsScratch);
+    for (let j = 0; j < candidateShips.length; j += 1) {
+      const s = candidateShips[j];
+      if (!s || !s.alive || s.id === b.ownerId || s.invulnTimer > 0) continue;
       if (wrapDistance(b.pos, s.pos, arena) <= SHIP_RADIUS + 5) {
         consumed = true;
         s.hp = Math.max(0, s.hp - (b.homing ? 30 : 20));
@@ -414,31 +493,39 @@ export function stepWorldState(
         break;
       }
     }
-    if (consumed) continue;
 
-    for (const ast of state.asteroids) {
-      if (destroyedAsteroidIds.has(ast.id)) continue;
-      if (wrapDistance(b.pos, ast.pos, arena) <= ast.radius + 4) {
-        consumed = true;
-        destroyedAsteroidIds.add(ast.id);
-        const shooter = state.ships.find((owner) => owner.id === b.ownerId);
-        if (shooter) shooter.score += 25;
-        events.push({ type: 'exploded', targetId: ast.id, score: 25 });
-        break;
+    if (!consumed) {
+      const candidateAsteroids = state.asteroidGrid.queryRadius(b.pos, 32, nearbyAsteroidsScratch);
+      for (let j = 0; j < candidateAsteroids.length; j += 1) {
+        const ast = candidateAsteroids[j];
+        if (!ast || destroyedAsteroidIds.has(ast.id)) continue;
+        if (wrapDistance(b.pos, ast.pos, arena) <= ast.radius + 4) {
+          consumed = true;
+          destroyedAsteroidIds.add(ast.id);
+          const shooter = state.ships.find((owner) => owner.id === b.ownerId);
+          if (shooter) shooter.score += 25;
+          events.push({ type: 'exploded', targetId: ast.id, score: 25 });
+          break;
+        }
       }
     }
 
-    if (!consumed) {
-      survivingBullets.push(b);
+    if (consumed) {
+      state.bulletPool.release(b);
+    } else {
+      state.bullets[writeIdx] = b;
+      writeIdx += 1;
     }
   }
+  state.bullets.length = writeIdx;
 
-  state.bullets = survivingBullets;
-
-  for (const s of state.ships) {
-    if (!s.alive || s.invulnTimer > 0) continue;
-    for (const ast of state.asteroids) {
-      if (destroyedAsteroidIds.has(ast.id)) continue;
+  for (let i = 0; i < state.ships.length; i += 1) {
+    const s = state.ships[i];
+    if (!s || !s.alive || s.invulnTimer > 0) continue;
+    const candidateAsteroids = state.asteroidGrid.queryRadius(s.pos, SHIP_RADIUS + 30, nearbyAsteroidsScratch);
+    for (let j = 0; j < candidateAsteroids.length; j += 1) {
+      const ast = candidateAsteroids[j];
+      if (!ast || destroyedAsteroidIds.has(ast.id)) continue;
       if (wrapDistance(s.pos, ast.pos, arena) <= SHIP_RADIUS + ast.radius - 3) {
         destroyedAsteroidIds.add(ast.id);
         s.hp = Math.max(0, s.hp - 35);
@@ -480,8 +567,8 @@ export function buildSnapshotFromWorld(
     entities.push({
       kind: 'ship',
       id: s.id,
-      pos: s.pos,
-      vel: s.vel,
+      pos: { x: s.pos.x, y: s.pos.y },
+      vel: { x: s.vel.x, y: s.vel.y },
       angle: s.angle,
       alive: s.alive,
       thrusting: s.thrusting,
@@ -495,8 +582,8 @@ export function buildSnapshotFromWorld(
     entities.push({
       kind: 'asteroid',
       id: a.id,
-      pos: a.pos,
-      vel: a.vel,
+      pos: { x: a.pos.x, y: a.pos.y },
+      vel: { x: a.vel.x, y: a.vel.y },
       angle: a.angle,
       radius: a.radius,
       homing: a.homing,
@@ -507,8 +594,8 @@ export function buildSnapshotFromWorld(
     entities.push({
       kind: 'bullet',
       id: b.id,
-      pos: b.pos,
-      vel: b.vel,
+      pos: { x: b.pos.x, y: b.pos.y },
+      vel: { x: b.vel.x, y: b.vel.y },
       angle: b.angle,
       ownerId: b.ownerId,
       homing: b.homing,

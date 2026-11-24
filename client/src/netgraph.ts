@@ -1,3 +1,5 @@
+import type { FrameStatsSummary } from './metrics.ts';
+
 export interface NetMetricsSnapshot {
   readonly rttMs: number;
   readonly downKBps: number;
@@ -5,12 +7,12 @@ export interface NetMetricsSnapshot {
   readonly queueLen: number;
   readonly reconcileErrorPx: number;
   readonly codecName: string;
+  readonly frameStats: FrameStatsSummary;
 }
 
 export class NetgraphHud {
   private readonly canvas: HTMLCanvasElement;
   private readonly ctx: CanvasRenderingContext2D;
-  private readonly rttHistory: number[] = [];
   private readonly downHistory: number[] = [];
   private bytesDownAcc = 0;
   private bytesUpAcc = 0;
@@ -38,13 +40,15 @@ export class NetgraphHud {
 
   public recordRtt(rttMs: number): void {
     this.currentRttMs = rttMs;
-    this.rttHistory.push(rttMs);
-    if (this.rttHistory.length > 60) {
-      this.rttHistory.shift();
-    }
   }
 
-  public tick(nowMs: number, queueLen: number, reconcileErrorPx: number, codecName: string): void {
+  public tick(
+    nowMs: number,
+    queueLen: number,
+    reconcileErrorPx: number,
+    codecName: string,
+    frameStats: FrameStatsSummary,
+  ): void {
     const elapsedMs = nowMs - this.lastSampleMs;
     if (elapsedMs >= 500) {
       const sec = elapsedMs / 1000;
@@ -67,6 +71,7 @@ export class NetgraphHud {
       queueLen,
       reconcileErrorPx,
       codecName,
+      frameStats,
     });
   }
 
@@ -77,18 +82,23 @@ export class NetgraphHud {
 
     ctx.font = '11px Consolas, monospace';
     ctx.fillStyle = '#38bdf8';
-    ctx.fillText(`NETGRAPH · ${m.codecName.toUpperCase()}`, 10, 16);
+    ctx.fillText(`NETGRAPH · ${m.codecName.toUpperCase()} · ${m.frameStats.fps} FPS`, 10, 16);
 
     ctx.fillStyle = '#e2e8f0';
-    ctx.fillText(`RTT:   ${m.rttMs.toFixed(1)} ms`, 10, 34);
-    ctx.fillText(`Down:  ${m.downKBps.toFixed(2)} KB/s`, 10, 50);
-    ctx.fillText(`Up:    ${m.upKBps.toFixed(2)} KB/s`, 10, 66);
-    ctx.fillText(`Queue: ${m.queueLen} cmds`, 10, 82);
+    ctx.fillText(`RTT:   ${m.rttMs.toFixed(1)} ms | Q:${m.queueLen}`, 10, 34);
+    ctx.fillText(`Down:  ${m.downKBps.toFixed(2)} KB/s | Up:${m.upKBps.toFixed(1)}`, 10, 50);
+
+    ctx.fillStyle = m.frameStats.p99Ms > 16.7 ? '#f59e0b' : '#22c55e';
+    ctx.fillText(
+      `Frame p50/p99: ${m.frameStats.p50Ms.toFixed(1)} / ${m.frameStats.p99Ms.toFixed(1)} ms`,
+      10,
+      66,
+    );
 
     ctx.fillStyle = m.reconcileErrorPx > 4 ? '#f59e0b' : '#22c55e';
-    ctx.fillText(`Corr:  ${m.reconcileErrorPx.toFixed(2)} px`, 10, 98);
+    ctx.fillText(`Corr:  ${m.reconcileErrorPx.toFixed(2)} px`, 10, 82);
 
-    this.drawSparkline(this.downHistory, 10, 108, width - 20, 28, '#38bdf8', 50);
+    this.drawSparkline(this.downHistory, 10, 94, width - 20, height - 104, '#38bdf8', 50);
   }
 
   private drawSparkline(

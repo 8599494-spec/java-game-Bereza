@@ -1,9 +1,9 @@
 import type { Server as HttpServer } from 'node:http';
 import { performance } from 'node:perf_hooks';
-import { type EntityId, binaryCodec, jsonCodec } from '@game/shared';
+import { binaryCodec, type EntityId, jsonCodec } from '@game/shared';
 import { type RawData, WebSocket, WebSocketServer } from 'ws';
 import type { ServerConfig } from './config.ts';
-import type { GameRoom, RoomManager } from './room.ts';
+import { type GameRoom, RoomManager } from './room.ts';
 
 function rawDataToUnknownPayload(data: RawData, isBinary: boolean): unknown {
   if (!isBinary) {
@@ -48,7 +48,9 @@ export function attachWebSocketServer(
 
     socket.on('message', (data: RawData, isBinary: boolean) => {
       const payload: unknown = rawDataToUnknownPayload(data, isBinary);
-      const parsed = isBinary ? binaryCodec.decodeClient(payload) : jsonCodec.decodeClient(payload);
+      const parsed = isBinary
+        ? binaryCodec.decodeClient(payload)
+        : jsonCodec.decodeClient(payload);
 
       if (!parsed.ok) {
         console.warn(`[WS ${remoteIp}] Invalid message rejected: ${parsed.error}`);
@@ -80,6 +82,14 @@ export function attachWebSocketServer(
           currentRoom.handleInput(currentShipId, msg);
           break;
         }
+        case 'chat': {
+          if (!currentRoom || currentShipId === null) {
+            sendErrorAndClose(socket, 'NOT_JOINED', 'Send join message before chat');
+            return;
+          }
+          currentRoom.broadcastChat(currentShipId, msg.text);
+          break;
+        }
         case 'ping': {
           const pong = {
             type: 'pong' as const,
@@ -89,7 +99,9 @@ export function attachWebSocketServer(
           if (currentRoom && currentShipId !== null) {
             currentRoom.sendDirect(currentShipId, pong);
           } else if (socket.readyState === WebSocket.OPEN) {
-            socket.send(isBinary ? binaryCodec.encodeServer(pong) : jsonCodec.encodeServer(pong));
+            socket.send(
+              isBinary ? binaryCodec.encodeServer(pong) : jsonCodec.encodeServer(pong),
+            );
           }
           break;
         }

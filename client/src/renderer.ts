@@ -6,6 +6,7 @@ import {
   type ShipSnapshotEntity,
   type SnapshotEntity,
 } from '@game/shared';
+import type { Particle } from './particles.ts';
 
 export class ArenaRenderer {
   private readonly canvas: HTMLCanvasElement;
@@ -24,14 +25,18 @@ export class ArenaRenderer {
     entities: readonly SnapshotEntity[],
     localShipId: EntityId | null,
     knownNames: ReadonlyMap<EntityId, string>,
+    particles: readonly Particle[] = [],
   ): void {
     const ctx = this.ctx;
     ctx.fillStyle = '#050811';
     ctx.fillRect(0, 0, ARENA.width, ARENA.height);
 
     this.drawGrid();
+    this.drawParticles(particles);
 
-    for (const entity of entities) {
+    for (let i = 0; i < entities.length; i += 1) {
+      const entity = entities[i];
+      if (!entity) continue;
       switch (entity.kind) {
         case 'asteroid':
           this.drawAsteroid(entity);
@@ -48,6 +53,18 @@ export class ArenaRenderer {
         }
       }
     }
+  }
+
+  private drawParticles(particles: readonly Particle[]): void {
+    const ctx = this.ctx;
+    for (let i = 0; i < particles.length; i += 1) {
+      const p = particles[i];
+      if (!p || !p.active) continue;
+      ctx.globalAlpha = Math.max(0, Math.min(1, p.life / p.maxLife));
+      ctx.fillStyle = p.color;
+      ctx.fillRect(p.x - p.size * 0.5, p.y - p.size * 0.5, p.size, p.size);
+    }
+    ctx.globalAlpha = 1;
   }
 
   private drawGrid(): void {

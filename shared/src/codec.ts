@@ -3,19 +3,19 @@ import {
   BINARY_MSG_TYPE,
   type ClientMessage,
   type CodecKind,
+  decodeAngleInt16,
+  encodeAngleInt16,
   type InputMessage,
   PROTOCOL_VERSION,
   type PingMessage,
   type PongMessage,
+  parseClientMessage,
+  parseServerMessage,
   type ServerMessage,
   type SnapshotEntity,
   type SnapshotMessage,
-  decodeAngleInt16,
-  encodeAngleInt16,
-  parseClientMessage,
-  parseServerMessage,
 } from './protocol.ts';
-import { type ParseResult, asEntityId, asSeq, asTick, vec2 } from './types.ts';
+import { asEntityId, asSeq, asTick, type ParseResult, vec2 } from './types.ts';
 
 const MAX_ENTITIES_PER_SNAPSHOT = 1024;
 const SNAPSHOT_HEADER_BYTES = 18;
@@ -291,6 +291,7 @@ export class BinaryCodec implements Codec {
         return encodePingPongBinary(BINARY_MSG_TYPE.PING, msg.clientTimeMs);
       case 'join':
       case 'netConfig':
+      case 'chat':
         return this.jsonFallback.encodeClient(msg);
       default: {
         const _exhaustive: never = msg;
@@ -365,6 +366,7 @@ export class BinaryCodec implements Codec {
         return encodePingPongBinary(BINARY_MSG_TYPE.PONG, msg.clientTimeMs);
       case 'welcome':
       case 'error':
+      case 'chat':
         return this.jsonFallback.encodeServer(msg);
       default: {
         const _exhaustive: never = msg;

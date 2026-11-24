@@ -1,6 +1,6 @@
 {
   "name": "@game/shared",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "private": true,
   "type": "module",
   "exports": {
@@ -9,9 +9,13 @@
     "./prng": "./src/prng.ts",
     "./protocol": "./src/protocol.ts",
     "./codec": "./src/codec.ts",
-    "./sim": "./src/sim.ts"
+    "./sim": "./src/sim.ts",
+    "./pool": "./src/pool.ts",
+    "./spatialHash": "./src/spatialHash.ts",
+    "./rateLimiter": "./src/rateLimiter.ts"
   },
   "scripts": {
-    "typecheck": "tsc --noEmit -p tsconfig.json"
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "vitest run ../shared/test"
   }
 }

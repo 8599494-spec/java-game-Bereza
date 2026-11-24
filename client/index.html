@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Space Dogfight — Lab 06 TypeScript Multiplayer</title>
+    <title>Space Dogfight — Lab 07 Performance, Pooling & Testing</title>
     <link rel="stylesheet" href="/src/style.css" />
   </head>
   <body>
@@ -12,7 +12,7 @@
         <div class="brand">
           <span class="dot"></span>
           <strong>SPACE DOGFIGHT</strong>
-          <span class="badge">TS STRICT · 30Hz AUTH</span>
+          <span class="badge">V8 POOL · 30Hz AUTH</span>
         </div>
         <div id="statusBar" class="status">Disconnected</div>
       </header>
@@ -38,7 +38,7 @@
       <main id="gameStage" class="stage hidden">
         <div class="arena-wrap">
           <canvas id="gameCanvas" width="900" height="600"></canvas>
-          <canvas id="netgraphCanvas" width="270" height="145" class="netgraph-overlay"></canvas>
+          <canvas id="netgraphCanvas" width="280" height="165" class="netgraph-overlay"></canvas>
         </div>
 
         <aside class="controls-bar">
@@ -56,10 +56,27 @@
           <div class="control-group buttons">
             <button type="button" id="togglePredictBtn" class="toggle active">Predict: ON</button>
             <button type="button" id="toggleCodecBtn" class="toggle active">Codec: BIN</button>
+            <button type="button" id="toggleWorkerBtn" class="toggle">Worker: OFF</button>
             <button type="button" id="toggleRandBugBtn" class="toggle">RandBug: OFF</button>
+            <button type="button" id="spawnBotsBtn">+8 Bots</button>
             <button type="button" id="disconnectBtn" class="danger">Leave</button>
           </div>
         </aside>
+
+        <section class="social-grid">
+          <div class="panel-box">
+            <h3>Active Pilots (<span id="rosterCount">0</span>)</h3>
+            <ul id="rosterList" class="roster-list"></ul>
+          </div>
+          <div class="panel-box chat-box">
+            <h3>Sector Comms</h3>
+            <div id="chatMessages" class="chat-messages"></div>
+            <form id="chatForm" class="chat-form">
+              <input id="chatInput" type="text" maxlength="160" placeholder="Send message to room..." />
+              <button type="submit" id="chatSendBtn">Send</button>
+            </form>
+          </div>
+        </section>
       </main>
     </div>
     <script type="module" src="/src/main.ts"></script>

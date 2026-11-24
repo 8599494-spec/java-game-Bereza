@@ -22,14 +22,35 @@ export interface Vector2 {
   readonly y: number;
 }
 
+export interface MutVec2 {
+  x: number;
+  y: number;
+}
+
 export const ZERO_VEC2: Vector2 = Object.freeze({ x: 0, y: 0 });
 
 export function vec2(x: number, y: number): Vector2 {
   return { x, y };
 }
 
+export function mutVec2(x = 0, y = 0): MutVec2 {
+  return { x, y };
+}
+
+export function setVec2(out: MutVec2, x: number, y: number): MutVec2 {
+  out.x = x;
+  out.y = y;
+  return out;
+}
+
 export function addVec2(a: Vector2, b: Vector2): Vector2 {
   return { x: a.x + b.x, y: a.y + b.y };
+}
+
+export function addVec2InPlace(out: MutVec2, b: Vector2): MutVec2 {
+  out.x += b.x;
+  out.y += b.y;
+  return out;
 }
 
 export function subVec2(a: Vector2, b: Vector2): Vector2 {
@@ -38,6 +59,12 @@ export function subVec2(a: Vector2, b: Vector2): Vector2 {
 
 export function scaleVec2(v: Vector2, k: number): Vector2 {
   return { x: v.x * k, y: v.y * k };
+}
+
+export function scaleVec2InPlace(out: MutVec2, k: number): MutVec2 {
+  out.x *= k;
+  out.y *= k;
+  return out;
 }
 
 export function lenVec2(v: Vector2): number {
