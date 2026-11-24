@@ -12,6 +12,7 @@
     "dev:server": "npm --workspace=server run dev",
     "dev:client": "npm --workspace=client run dev",
     "build": "npm --workspace=client run build",
+    "build:server": "npm --workspace=shared run build && npm --workspace=server run build",
     "start": "npm --workspace=server run start",
     "typecheck": "npm --workspace=shared run typecheck && npm --workspace=server run typecheck && npm --workspace=client run typecheck",
     "lint": "biome check ./shared/src ./shared/test ./shared/scripts ./client/src ./client/test ./server/src ./server/test ./server/scripts ./e2e",

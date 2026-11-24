@@ -367,6 +367,7 @@ export class BinaryCodec implements Codec {
       case 'welcome':
       case 'error':
       case 'chat':
+      case 'shutdown':
         return this.jsonFallback.encodeServer(msg);
       default: {
         const _exhaustive: never = msg;

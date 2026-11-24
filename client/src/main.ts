@@ -101,6 +101,10 @@ let socket: WebSocket | null = null;
 let activeCodec: Codec = binaryCodec;
 let localShipId: EntityId | null = null;
 let currentRoomName = 'Sector Alpha';
+let lastPlayerName = 'Pilot';
+let manualDisconnect = false;
+let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+let reconnectAttempt = 0;
 let latestServerTick: Tick = asTick(0);
 let inputSeqCounter = 0;
 
@@ -316,9 +320,22 @@ bus.on('disconnected', ({ reason }) => {
   interpolator.reset();
   particles.reset();
   knownShipNames.clear();
-  statusBar.textContent = `Disconnected (${reason})`;
   gameStage.classList.add('hidden');
   lobbyPanel.classList.remove('hidden');
+
+  if (manualDisconnect) {
+    statusBar.textContent = `Disconnected (${reason})`;
+    return;
+  }
+
+  reconnectAttempt += 1;
+  const delayMs = Math.min(8000, 1000 * 2 ** (reconnectAttempt - 1));
+  statusBar.textContent = `Connection lost (${reason}). Returning to lobby — retrying in ${(delayMs / 1000).toFixed(1)}s...`;
+  if (reconnectTimer) clearTimeout(reconnectTimer);
+  reconnectTimer = setTimeout(() => {
+    reconnectTimer = null;
+    connectToServer(lastPlayerName, currentRoomName);
+  }, delayMs);
 });
 
 bus.on('serverError', ({ code, message }) => {
@@ -326,6 +343,12 @@ bus.on('serverError', ({ code, message }) => {
 });
 
 function connectToServer(playerName: string, roomName: string): void {
+  if (reconnectTimer) {
+    clearTimeout(reconnectTimer);
+    reconnectTimer = null;
+  }
+  manualDisconnect = false;
+  lastPlayerName = playerName;
   if (socket) {
     socket.close();
     socket = null;
@@ -383,6 +406,7 @@ function connectToServer(playerName: string, roomName: string): void {
         predictor.reconcile(msg.snapshot);
         interpolator.push(msg.snapshot, performance.now());
         updateRosterUI(msg.snapshot.entities);
+        reconnectAttempt = 0;
         bus.emit('connected', { roomId: msg.roomId, shipId: msg.shipId });
         break;
       }
@@ -413,6 +437,10 @@ function connectToServer(playerName: string, roomName: string): void {
       }
       case 'error': {
         bus.emit('serverError', { code: msg.code, message: msg.message });
+        break;
+      }
+      case 'shutdown': {
+        statusBar.textContent = `Server restarting (${msg.reason}). Reconnecting...`;
         break;
       }
       default: {
@@ -456,6 +484,11 @@ spawnBotsBtn.addEventListener('click', () => {
 });
 
 disconnectBtn.addEventListener('click', () => {
+  manualDisconnect = true;
+  if (reconnectTimer) {
+    clearTimeout(reconnectTimer);
+    reconnectTimer = null;
+  }
   socket?.close(1000, 'Player left');
 });
 
@@ -502,3 +535,51 @@ window.addEventListener('keyup', (ev: KeyboardEvent) => {
 window.addEventListener('blur', () => {
   pressedKeys.clear();
 });
+
+// --- Lab 08 M4: PWA Service Worker, Install Prompt & Offline Shell Status ---
+interface BeforeInstallPromptEvent extends Event {
+  prompt(): Promise<void>;
+  userChoice: Promise<{ outcome: 'accepted' | 'dismissed' }>;
+}
+
+let deferredInstallPrompt: BeforeInstallPromptEvent | null = null;
+const installPwaBtn = document.getElementById('installPwaBtn') as HTMLButtonElement | null;
+
+window.addEventListener('beforeinstallprompt', (event: Event) => {
+  event.preventDefault();
+  deferredInstallPrompt = event as BeforeInstallPromptEvent;
+  installPwaBtn?.classList.remove('hidden');
+});
+
+installPwaBtn?.addEventListener('click', () => {
+  if (!deferredInstallPrompt) return;
+  void deferredInstallPrompt.prompt().then(() => {
+    deferredInstallPrompt = null;
+    installPwaBtn.classList.add('hidden');
+  });
+});
+
+window.addEventListener('appinstalled', () => {
+  deferredInstallPrompt = null;
+  installPwaBtn?.classList.add('hidden');
+});
+
+window.addEventListener('offline', () => {
+  if (reconnectTimer) {
+    clearTimeout(reconnectTimer);
+    reconnectTimer = null;
+  }
+  statusBar.textContent = 'Offline — server unreachable (cached shell active)';
+});
+
+window.addEventListener('online', () => {
+  statusBar.textContent = 'Back online — ready to launch';
+});
+
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    void navigator.serviceWorker.register('/sw.js').catch(() => {
+      // Ignore SW registration errors in restricted test contexts
+    });
+  });
+}

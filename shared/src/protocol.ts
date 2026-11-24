@@ -160,12 +160,19 @@ export const ChatServerMessageSchema = z.object({
   text: z.string(),
 });
 
+export const ShutdownServerMessageSchema = z.object({
+  type: z.literal('shutdown'),
+  reason: z.string(),
+  reconnectMs: z.number().int().nonnegative(),
+});
+
 export const ServerMessageSchema = z.discriminatedUnion('type', [
   WelcomeMessageSchema,
   SnapshotMessageSchema,
   PongMessageSchema,
   ErrorMessageSchema,
   ChatServerMessageSchema,
+  ShutdownServerMessageSchema,
 ]);
 
 export type ShipSnapshotEntity = z.infer<typeof ShipSnapshotEntitySchema>;
@@ -177,6 +184,7 @@ export type WelcomeMessage = z.infer<typeof WelcomeMessageSchema>;
 export type PongMessage = z.infer<typeof PongMessageSchema>;
 export type ErrorMessage = z.infer<typeof ErrorMessageSchema>;
 export type ChatServerMessage = z.infer<typeof ChatServerMessageSchema>;
+export type ShutdownServerMessage = z.infer<typeof ShutdownServerMessageSchema>;
 export type ServerMessage = z.infer<typeof ServerMessageSchema>;
 
 export function parseClientMessage(raw: unknown): ParseResult<ClientMessage> {

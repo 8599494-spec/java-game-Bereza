@@ -12,11 +12,14 @@ import {
   binaryCodec,
   getCodec,
 } from '@game/shared';
+import type { Logger } from 'pino';
 import type { WebSocket } from 'ws';
 import { BotController } from './bot.ts';
 import type { ServerConfig } from './config.ts';
 import { TypedEventEmitter } from './events.ts';
+import { logger as defaultLogger } from './logger.ts';
 import { AuthoritativeMatch, type TickTimingStats } from './match.ts';
+import { type GameMetrics, gameMetrics } from './metrics.ts';
 import { NetworkSimulator } from './netSim.ts';
 
 export interface PlayerSession {
@@ -40,17 +43,33 @@ export type RoomEvents = {
   empty: { readonly roomId: RoomId };
 };
 
+function payloadByteLength(payload: ArrayBuffer | string): number {
+  if (payload instanceof ArrayBuffer) return payload.byteLength;
+  return Buffer.byteLength(payload, 'utf8');
+}
+
 export class GameRoom extends TypedEventEmitter<RoomEvents> {
   public readonly id: RoomId;
   private readonly maxPlayers: number;
   private readonly sessions = new Map<EntityId, PlayerSession>();
   public readonly match: AuthoritativeMatch;
+  private readonly log: Logger;
+  private readonly metrics: GameMetrics;
   private nextShipNumber = 1;
 
-  public constructor(id: RoomId, config: ServerConfig, autoStart = true) {
+  public constructor(
+    id: RoomId,
+    config: ServerConfig,
+    autoStart = true,
+    log: Logger = defaultLogger,
+    metrics: GameMetrics = gameMetrics,
+  ) {
     super();
     this.id = id;
     this.maxPlayers = config.MAX_PLAYERS_PER_ROOM;
+    this.log = log.child({ roomId: id });
+    this.metrics = metrics;
+
     const seed = Array.from(id).reduce((acc, ch) => (acc * 31 + ch.charCodeAt(0)) >>> 0, 1337);
     this.match = new AuthoritativeMatch(seed, (shipId, snapshot) => {
       const session = this.sessions.get(shipId);
@@ -195,14 +214,23 @@ export class GameRoom extends TypedEventEmitter<RoomEvents> {
     this.sendToSession(session, msg);
   }
 
+  public stopAll(): void {
+    for (const session of this.sessions.values()) {
+      session.netSim.dispose();
+    }
+    this.sessions.clear();
+    this.match.stop();
+  }
+
   private sendToSession(session: PlayerSession, msg: ServerMessage): void {
     if (session.socket.readyState !== session.socket.OPEN) return;
     try {
       const payload = session.codec.encodeServer(msg);
+      this.metrics.recordPacketOut(payloadByteLength(payload));
       session.socket.send(payload);
     } catch (err: unknown) {
       const reason = err instanceof Error ? err.message : String(err);
-      console.error(`[Room ${this.id}] Failed to send packet to ship ${session.id}: ${reason}`);
+      this.log.warn({ event: 'packet.send_failed', playerId: session.id, reason });
     }
   }
 }
@@ -210,24 +238,33 @@ export class GameRoom extends TypedEventEmitter<RoomEvents> {
 export class RoomManager {
   private readonly rooms = new Map<RoomId, GameRoom>();
   private readonly config: ServerConfig;
+  private readonly log: Logger;
+  private readonly metrics: GameMetrics;
 
-  public constructor(config: ServerConfig) {
+  public constructor(config: ServerConfig, log: Logger = defaultLogger, metrics: GameMetrics = gameMetrics) {
     this.config = config;
+    this.log = log;
+    this.metrics = metrics;
   }
 
   public getOrCreateRoom(rawRoomName: string, autoStart = true): GameRoom {
     const roomId = asRoomId(rawRoomName.trim() || 'Sector Alpha');
     let room = this.rooms.get(roomId);
     if (!room) {
-      room = new GameRoom(roomId, this.config, autoStart);
+      if (this.rooms.size >= this.config.MAX_ROOMS) {
+        throw new Error('ROOM_LIMIT_REACHED');
+      }
+      room = new GameRoom(roomId, this.config, autoStart, this.log, this.metrics);
+      this.log.info({ event: 'room.created', roomId }, 'Room created');
+
       room.on('playerJoined', ({ roomId: rId, shipId, name }) => {
-        console.log(`[Room ${rId}] Pilot "${name}" joined as ship #${shipId}`);
+        this.log.info({ event: 'player.joined', roomId: rId, playerId: shipId, playerName: name });
       });
       room.on('playerLeft', ({ roomId: rId, shipId }) => {
-        console.log(`[Room ${rId}] Ship #${shipId} disconnected`);
+        this.log.info({ event: 'player.left', roomId: rId, playerId: shipId });
       });
       room.on('empty', ({ roomId: rId }) => {
-        console.log(`[Room ${rId}] Empty, disposing room`);
+        this.log.info({ event: 'room.disposed', roomId: rId });
         this.rooms.delete(rId);
       });
       this.rooms.set(roomId, room);
@@ -238,6 +275,13 @@ export class RoomManager {
   public getRoom(rawRoomName: string): GameRoom | undefined {
     const roomId = asRoomId(rawRoomName.trim());
     return this.rooms.get(roomId);
+  }
+
+  public stopAllRooms(): void {
+    for (const room of this.rooms.values()) {
+      room.stopAll();
+    }
+    this.rooms.clear();
   }
 
   public getStats(): {

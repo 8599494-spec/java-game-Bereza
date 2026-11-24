@@ -3,6 +3,10 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#0b1020" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="icon" type="image/png" href="/icon-192.png" />
+    <link rel="apple-touch-icon" href="/icon-192.png" />
     <title>Space Dogfight — Lab 07 Performance, Pooling & Testing</title>
     <link rel="stylesheet" href="/src/style.css" />
   </head>
@@ -14,7 +18,10 @@
           <strong>SPACE DOGFIGHT</strong>
           <span class="badge">V8 POOL · 30Hz AUTH</span>
         </div>
-        <div id="statusBar" class="status">Disconnected</div>
+        <div style="display:flex;align-items:center;gap:10px;">
+          <button type="button" id="installPwaBtn" class="toggle hidden">Install App</button>
+          <div id="statusBar" class="status">Disconnected</div>
+        </div>
       </header>
 
       <section id="lobbyPanel" class="panel lobby">
