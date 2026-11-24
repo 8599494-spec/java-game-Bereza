@@ -1,236 +1,182 @@
+import { ENTITY_KIND } from '@game/shared';
+
 export function createRenderer(canvas, arena) {
-	const ctx = canvas.getContext("2d");
-	let spriteSheet = null;
+  const ctx = canvas.getContext('2d');
+  let spriteSheet = null;
 
-	function resize() {
-		const dpr = window.devicePixelRatio || 1;
-		canvas.style.width = `${arena.width}px`;
-		canvas.style.height = `${arena.height}px`;
-		canvas.width = Math.floor(arena.width * dpr);
-		canvas.height = Math.floor(arena.height * dpr);
-		ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-	}
+  const stars = Array.from({ length: 85 }, (_, i) => ({
+    x: (i * 197) % arena.width,
+    y: (i * 313) % arena.height,
+    r: i % 3 === 0 ? 1.6 : 1.0,
+    alpha: 0.35 + (i % 5) * 0.12,
+  }));
 
-	resize();
-	window.addEventListener("resize", resize);
+  function drawShip(ship, { isLocal = false } = {}) {
+    if (!ship.alive) return;
+    ctx.save();
+    ctx.translate(ship.x, ship.y);
 
-	return {
-		setSpriteSheet(img) {
-			spriteSheet = img;
-		},
+    // Смужка HP над кораблем
+    const hpRatio = Math.max(0, Math.min(1, (ship.hp ?? ship.extra ?? 100) / 100));
+    ctx.fillStyle = '#0f172a';
+    ctx.fillRect(-18, -28, 36, 4);
+    ctx.fillStyle = isLocal ? '#22c55e' : '#f59e0b';
+    ctx.fillRect(-18, -28, 36 * hpRatio, 4);
 
-		drawLoading({
-			title = "LOADING ASSETS...",
-			progress,
-			errorMessage = null,
-		}) {
-			ctx.fillStyle = "#050811";
-			ctx.fillRect(0, 0, arena.width, arena.height);
+    if (ship.name) {
+      ctx.font = '10px ui-monospace, monospace';
+      ctx.fillStyle = isLocal ? '#38bdf8' : '#fbbf24';
+      ctx.textAlign = 'center';
+      ctx.fillText(ship.name, 0, -33);
+    }
 
-			const barW = 480;
-			const barH = 22;
-			const barX = (arena.width - barW) / 2;
-			const barY = 210;
-			const ratio = progress?.ratio ?? 0;
+    ctx.rotate(ship.angle);
 
-			ctx.fillStyle = "#38bdf8";
-			ctx.font = "bold 20px monospace";
-			ctx.textAlign = "center";
-			ctx.fillText(title, arena.width / 2, 175);
+    // Полум'я двигуна
+    if (ship.thrusting || ship.special) {
+      ctx.fillStyle = '#f97316';
+      ctx.beginPath();
+      ctx.moveTo(-14, -5);
+      ctx.lineTo(-24 - Math.random() * 6, 0);
+      ctx.lineTo(-14, 5);
+      ctx.closePath();
+      ctx.fill();
+    }
 
-			ctx.strokeStyle = "#334155";
-			ctx.lineWidth = 2;
-			ctx.strokeRect(barX, barY, barW, barH);
+    if (spriteSheet) {
+      ctx.drawImage(spriteSheet, 0, 0, 64, 64, -24, -24, 48, 48);
+    } else {
+      ctx.strokeStyle = isLocal ? '#38bdf8' : '#f59e0b';
+      ctx.fillStyle = isLocal ? 'rgba(56, 189, 248, 0.25)' : 'rgba(245, 158, 11, 0.25)';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(18, 0);
+      ctx.lineTo(-14, -12);
+      ctx.lineTo(-8, 0);
+      ctx.lineTo(-14, 12);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
 
-			ctx.fillStyle = errorMessage ? "#ef4444" : "#0284c7";
-			ctx.fillRect(
-				barX + 2,
-				barY + 2,
-				Math.max(0, (barW - 4) * ratio),
-				barH - 4,
-			);
+  function drawAsteroid(ast) {
+    const r = ast.extra || ast.radius || 24;
+    ctx.save();
+    ctx.translate(ast.x, ast.y);
+    if (spriteSheet) {
+      const sx = ast.special ? 192 : 128;
+      ctx.drawImage(spriteSheet, sx, 0, 64, 64, -r, -r, r * 2, r * 2);
+    } else {
+      ctx.strokeStyle = ast.special ? '#f43f5e' : '#94a3b8';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(0, 0, r, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
 
-			ctx.fillStyle = "#e2e8f0";
-			ctx.font = "13px monospace";
-			ctx.fillText(
-				`${Math.round(ratio * 100)}% (${progress?.completed ?? 0}/${progress?.total ?? 0} assets)`,
-				arena.width / 2,
-				barY + 44,
-			);
+  function drawBullet(b, { predicted = false } = {}) {
+    ctx.save();
+    ctx.translate(b.x, b.y);
+    ctx.fillStyle = predicted ? '#38bdf8' : b.special ? '#f59e0b' : '#f8fafc';
+    ctx.beginPath();
+    ctx.arc(0, 0, b.special ? 4.5 : 3, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
 
-			ctx.textAlign = "left";
-			for (const [idx, item] of (progress?.items ?? []).entries()) {
-				const y = 290 + idx * 24;
-				const badge =
-					item.status === "done"
-						? "[OK]"
-						: item.status === "error"
-							? "[ERR]"
-							: item.status === "loading"
-								? "[..]"
-								: "[  ]";
-				ctx.fillStyle =
-					item.status === "done"
-						? "#22c55e"
-						: item.status === "error"
-							? "#f87171"
-							: "#94a3b8";
-				ctx.fillText(`${badge} ${item.key} -> ${item.url}`, barX, y);
-			}
+  return {
+    setSpriteSheet(img) {
+      spriteSheet = img;
+    },
 
-			if (errorMessage) {
-				ctx.fillStyle = "#fca5a5";
-				ctx.textAlign = "center";
-				ctx.fillText(`Failure: ${errorMessage}`, arena.width / 2, 465);
-				ctx.textAlign = "left";
-			}
-		},
+    drawLoading({ title, progress, errorMessage = '' }) {
+      ctx.fillStyle = '#050811';
+      ctx.fillRect(0, 0, arena.width, arena.height);
+      ctx.textAlign = 'center';
+      ctx.font = 'bold 20px ui-monospace, monospace';
+      ctx.fillStyle = '#38bdf8';
+      ctx.fillText(title, arena.width / 2, 180);
 
-		draw(world, ship, hud) {
-			ctx.fillStyle = "#0b0f19";
-			ctx.fillRect(0, 0, arena.width, arena.height);
+      const barW = 460;
+      const barH = 18;
+      const bx = (arena.width - barW) / 2;
+      const by = 215;
+      ctx.strokeStyle = '#334155';
+      ctx.strokeRect(bx, by, barW, barH);
+      ctx.fillStyle = '#0284c7';
+      ctx.fillRect(bx + 2, by + 2, (barW - 4) * (progress.ratio ?? 0), barH - 4);
 
-			for (const entity of world) {
-				if (entity.dead) continue;
+      ctx.font = '13px ui-monospace, monospace';
+      ctx.fillStyle = '#cbd5e1';
+      ctx.fillText(
+        `${Math.round((progress.ratio ?? 0) * 100)}% (${progress.completed}/${progress.total} assets)`,
+        arena.width / 2,
+        258,
+      );
 
-				if (entity.kind === "particle") {
-					ctx.fillStyle = entity.meta.color || "#f97316";
-					ctx.fillRect(entity.pos.x - 1.5, entity.pos.y - 1.5, 3, 3);
-					continue;
-				}
+      if (errorMessage) {
+        ctx.fillStyle = '#f87171';
+        ctx.fillText(`Failure: ${errorMessage}`, arena.width / 2, 390);
+      }
+    },
 
-				if (entity.kind === "pickup") {
-					const isHeal = entity.meta.pickupType === "heal";
-					const pulseScale = 1 + (entity.meta.pulse || 0) * 0.12;
-					ctx.save();
-					ctx.translate(entity.pos.x, entity.pos.y);
-					ctx.scale(pulseScale, pulseScale);
-					ctx.strokeStyle = isHeal ? "#22c55e" : "#eab308";
-					ctx.lineWidth = 2;
-					ctx.strokeRect(-9, -9, 18, 18);
-					ctx.fillStyle = isHeal ? "#22c55e" : "#eab308";
-					ctx.font = "bold 12px monospace";
-					ctx.textAlign = "center";
-					ctx.textBaseline = "middle";
-					ctx.fillText(isHeal ? "+" : "H", 0, 1);
-					ctx.restore();
-					continue;
-				}
+    drawMultiplayer({ localShip, remoteEntities, predictedBullets, hud, netgraph, netMetrics }) {
+      ctx.fillStyle = '#050811';
+      ctx.fillRect(0, 0, arena.width, arena.height);
 
-				if (entity.kind === "asteroid") {
-					ctx.save();
-					ctx.translate(entity.pos.x, entity.pos.y);
-					ctx.rotate(entity.angle);
-					if (spriteSheet) {
-						const sx = entity.meta.homing ? 192 : 128;
-						const size = entity.radius * 2.4;
-						ctx.drawImage(
-							spriteSheet,
-							sx,
-							0,
-							64,
-							64,
-							-size / 2,
-							-size / 2,
-							size,
-							size,
-						);
-					} else {
-						ctx.strokeStyle = entity.meta.homing ? "#f43f5e" : "#94a3b8";
-						ctx.lineWidth = 2;
-						ctx.beginPath();
-						ctx.arc(0, 0, entity.radius, 0, Math.PI * 2);
-						ctx.stroke();
-					}
-					ctx.restore();
-					continue;
-				}
+      for (const st of stars) {
+        ctx.fillStyle = `rgba(226, 232, 240, ${st.alpha})`;
+        ctx.fillRect(st.x, st.y, st.r, st.r);
+      }
 
-				if (entity.kind === "bullet") {
-					ctx.save();
-					ctx.translate(entity.pos.x, entity.pos.y);
-					ctx.rotate(entity.angle);
-					if (spriteSheet) {
-						const sy = entity.meta.homing ? 32 : 0;
-						ctx.drawImage(spriteSheet, 64, sy, 64, 32, -16, -8, 32, 16);
-					} else {
-						ctx.fillStyle = entity.meta.homing ? "#f59e0b" : "#38bdf8";
-						ctx.beginPath();
-						ctx.arc(0, 0, entity.radius, 0, Math.PI * 2);
-						ctx.fill();
-					}
-					ctx.restore();
-					continue;
-				}
+      for (const e of remoteEntities) {
+        if (e.kind === ENTITY_KIND.ASTEROID) drawAsteroid(e);
+        else if (e.kind === ENTITY_KIND.BULLET) drawBullet(e);
+        else if (e.kind === ENTITY_KIND.SHIP) drawShip(e, { isLocal: false });
+      }
 
-				if (entity.kind === "ship") {
-					if (
-						entity.invulnTimer > 0 &&
-						Math.floor(entity.invulnTimer * 12) % 2 === 0
-					)
-						continue;
-					ctx.save();
-					ctx.translate(entity.pos.x, entity.pos.y);
-					ctx.rotate(entity.angle);
-					if (spriteSheet) {
-						ctx.drawImage(spriteSheet, 0, 0, 64, 64, -24, -24, 48, 48);
-					} else {
-						ctx.strokeStyle = "#38bdf8";
-						ctx.lineWidth = 2;
-						ctx.beginPath();
-						ctx.moveTo(16, 0);
-						ctx.lineTo(-12, -10);
-						ctx.lineTo(-12, 10);
-						ctx.closePath();
-						ctx.stroke();
-					}
-					if (hud.isThrusting) {
-						ctx.strokeStyle = "#f97316";
-						ctx.lineWidth = 2;
-						ctx.beginPath();
-						ctx.moveTo(-12, -4);
-						ctx.lineTo(-22, 0);
-						ctx.lineTo(-12, 4);
-						ctx.stroke();
-					}
-					ctx.restore();
-				}
-			}
+      for (const pb of predictedBullets) {
+        drawBullet(pb, { predicted: true });
+      }
 
-			ctx.fillStyle = "#94a3b8";
-			ctx.font = "14px monospace";
-			ctx.fillText(
-				`Pilot: ${hud.playerName} | Room: ${hud.roomName} | ${hud.stats.framesPerSec} FPS`,
-				16,
-				24,
-			);
-			ctx.fillStyle = ship.hp > 35 ? "#22c55e" : "#ef4444";
-			ctx.fillText(`HP: ${ship.hp}/${ship.maxHp}`, 16, 48);
-			ctx.fillStyle = "#38bdf8";
-			ctx.fillText(
-				`Score: ${hud.score} | Homing [E/Shift]: ${ship.homingAmmo} | Sound [M]: ${hud.muted ? "OFF" : "ON"}`,
-				16,
-				70,
-			);
-			ctx.fillStyle = "#64748b";
-			ctx.font = "12px monospace";
-			ctx.fillText(
-				"WASD / Arrows: Fly | Space: Fire | E/Shift: Homing | M: Mute | ?fail=404|timeout|abort|json",
-				16,
-				arena.height - 16,
-			);
+      if (localShip) {
+        drawShip(localShip, { isLocal: true });
+      }
 
-			if (ship.dead) {
-				ctx.fillStyle = "#f8fafc";
-				ctx.font = "bold 22px monospace";
-				ctx.textAlign = "center";
-				ctx.fillText(
-					`SHIP DESTROYED — RESPAWN IN ${hud.respawnTimer.toFixed(1)}s`,
-					arena.width / 2,
-					arena.height / 2,
-				);
-				ctx.textAlign = "left";
-			}
-		},
-	};
+      // Верхній HUD
+      ctx.save();
+      ctx.fillStyle = 'rgba(2, 6, 23, 0.78)';
+      ctx.fillRect(0, 0, arena.width, 46);
+      ctx.font = '12px ui-monospace, monospace';
+      ctx.fillStyle = '#e2e8f0';
+      ctx.textAlign = 'left';
+      ctx.fillText(
+        `PILOT: ${hud.playerName} | ROOM: ${hud.roomName} | HP: ${localShip?.hp ?? 0} | SCORE: ${localShip?.score ?? 0}`,
+        14,
+        20,
+      );
+      ctx.fillStyle = '#94a3b8';
+      ctx.fillText(
+        `FPS: ${hud.fps} | Server: 30 Hz | [WASD/Arrows] Fly  [Space/E] Fire  [Enter] Chat  [M] Mute`,
+        14,
+        37,
+      );
+
+      if (localShip && !localShip.alive) {
+        ctx.textAlign = 'center';
+        ctx.font = 'bold 22px ui-monospace, monospace';
+        ctx.fillStyle = '#f43f5e';
+        ctx.fillText('SHIP DESTROYED — RESPAWNING ON SERVER...', arena.width / 2, arena.height / 2);
+      }
+      ctx.restore();
+
+      if (netgraph && netMetrics) {
+        netgraph.draw(ctx, netMetrics);
+      }
+    },
+  };
 }

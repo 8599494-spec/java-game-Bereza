@@ -1,4 +1,4 @@
-﻿import fs from 'node:fs';
+import fs from 'node:fs';
 import http from 'node:http';
 import path from 'node:path';
 import { pipeline } from 'node:stream/promises';
@@ -45,7 +45,7 @@ function readJsonBody(req, maxBytes = 8192) {
   });
 }
 
-export function createAppServer(config, roomManager, getWsCount = () => 0) {
+export function createAppServer(config, roomManager, netSim, getWsCount = () => 0) {
   return http.createServer(async (req, res) => {
     try {
       const rawUrl = req.url || '/';
@@ -57,7 +57,6 @@ export function createAppServer(config, roomManager, getWsCount = () => 0) {
         return;
       }
 
-      // Відхиляємо будь-які спроби path traversal з ".."
       if (rawUrl.includes('..') || decodedPath.includes('..')) {
         sendJson(res, 400, { error: 'Path traversal is forbidden' });
         return;
@@ -69,7 +68,24 @@ export function createAppServer(config, roomManager, getWsCount = () => 0) {
           uptimeSec: +process.uptime().toFixed(2),
           wsClients: getWsCount(),
           rssMb: +(process.memoryUsage().rss / (1024 * 1024)).toFixed(2),
+          netSim: netSim.getSettings(),
         });
+        return;
+      }
+
+      if (req.method === 'GET' && decodedPath === '/api/stats') {
+        sendJson(res, 200, {
+          wsClients: getWsCount(),
+          rssMb: +(process.memoryUsage().rss / (1024 * 1024)).toFixed(2),
+          netSim: netSim.getSettings(),
+          matches: roomManager.getAllMatchStats(),
+        });
+        return;
+      }
+
+      if (req.method === 'POST' && decodedPath === '/api/net-sim') {
+        const body = await readJsonBody(req);
+        sendJson(res, 200, netSim.update(body));
         return;
       }
 
@@ -104,7 +120,6 @@ export function createAppServer(config, roomManager, getWsCount = () => 0) {
         return;
       }
 
-      // Віддача зібраного клієнта з client/dist
       const relativePath = decodedPath === '/' ? 'index.html' : decodedPath.replace(/^\/+/, '');
       const resolvedFile = path.resolve(config.clientDistDir, relativePath);
 

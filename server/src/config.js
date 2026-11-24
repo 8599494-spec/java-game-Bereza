@@ -1,4 +1,4 @@
-﻿import path from 'node:path';
+import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -16,17 +16,19 @@ export function loadConfig(env = process.env) {
     throw new Error('Invalid LOG_DIR environment variable: must be a non-empty path.');
   }
 
-  const logDir = path.resolve(rawLogDir);
-  const clientDistDir = path.resolve(env.CLIENT_DIST_DIR ?? path.join(repoRoot, 'client', 'dist'));
+  const latencyMs = Math.max(0, Number(env.SIM_LATENCY_MS ?? 0) || 0);
+  const jitterMs = Math.max(0, Number(env.SIM_JITTER_MS ?? 0) || 0);
+  const dropPct = Math.max(0, Math.min(50, Number(env.SIM_DROP_PCT ?? 0) || 0));
 
   return Object.freeze({
     port,
-    logDir,
-    clientDistDir,
-    maxPayloadBytes: 4096,
+    logDir: path.resolve(rawLogDir),
+    clientDistDir: path.resolve(env.CLIENT_DIST_DIR ?? path.join(repoRoot, 'client', 'dist')),
+    maxPayloadBytes: 8192,
     joinTimeoutMs: 5000,
     pingIntervalMs: 15000,
-    rateLimitPerSec: 12,
+    rateLimitPerSec: 90,
     maxBufferedBytes: 64 * 1024,
+    defaultNetSim: { latencyMs, jitterMs, dropPct },
   });
 }

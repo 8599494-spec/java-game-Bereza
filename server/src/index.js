@@ -1,19 +1,20 @@
-﻿import { loadConfig } from './config.js';
+import { loadConfig } from './config.js';
 import { createAppServer } from './httpServer.js';
+import { NetworkSimulator } from './netSim.js';
 import { RoomManager } from './room.js';
 import { attachWebSocketServer } from './wsServer.js';
 
 const config = loadConfig();
-const roomManager = new RoomManager(config);
+const netSim = new NetworkSimulator(config.defaultNetSim);
+const roomManager = new RoomManager(config, netSim);
 
 let wsController = null;
-const server = createAppServer(config, roomManager, () => wsController?.getClientCount() ?? 0);
-wsController = attachWebSocketServer(server, roomManager, config);
+const server = createAppServer(config, roomManager, netSim, () => wsController?.getClientCount() ?? 0);
+wsController = attachWebSocketServer(server, roomManager, config, netSim);
 
 server.listen(config.port, () => {
   console.log(`[Server] Listening on http://localhost:${config.port}`);
   console.log(`[Server] Logs dir: ${config.logDir}`);
-  console.log(`[Server] Client dist: ${config.clientDistDir}`);
 });
 
 let shuttingDown = false;

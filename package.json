@@ -1,8 +1,10 @@
 {
   "name": "java-game-bereza",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "private": true,
+  "type": "module",
   "workspaces": [
+    "shared",
     "client",
     "server"
   ],
@@ -11,14 +13,13 @@
     "dev:client": "npm --workspace=client run dev",
     "build": "npm --workspace=client run build",
     "start": "npm --workspace=server run start",
+    "test": "node --test shared/test/*.test.js",
+    "bench:codec": "node shared/scripts/bench-codec.mjs",
     "bench:rss": "node server/scripts/bench-stream-rss.mjs",
-    "check": "biome check --write ./client/src ./server/src ./server/scripts"
+    "gen:gif": "node shared/scripts/generate-demo-gif.mjs",
+    "check": "biome check --write ./shared/src ./shared/test ./shared/scripts ./client/src ./server/src ./server/scripts"
   },
   "devDependencies": {
     "@biomejs/biome": "^1.9.4"
-  },
-  "allowScripts": {
-    "esbuild@0.25.12": true,
-    "@biomejs/biome@1.9.4": true
   }
 }

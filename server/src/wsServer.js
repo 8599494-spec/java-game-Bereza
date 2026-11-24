@@ -1,9 +1,10 @@
-﻿import { randomUUID } from 'node:crypto';
+import { randomUUID } from 'node:crypto';
+import { MSG_TYPE, decodeBinaryPacket, encodePingPongBinary, validateInputPacket } from '@game/shared';
 import { WebSocketServer } from 'ws';
 
-const ALLOWED_TYPES = new Set(['join', 'chat', 'leave']);
+const ALLOWED_JSON_TYPES = new Set(['join', 'chat', 'leave', 'input', 'ping', 'net-sim', 'codec']);
 
-function parseAndValidateMessage(rawBuffer) {
+function parseJsonControlMessage(rawBuffer) {
   let parsed;
   try {
     parsed = JSON.parse(rawBuffer.toString('utf8'));
@@ -15,7 +16,7 @@ function parseAndValidateMessage(rawBuffer) {
     return { error: 'Payload must be a JSON object', code: 1003 };
   }
 
-  if (typeof parsed.type !== 'string' || !ALLOWED_TYPES.has(parsed.type)) {
+  if (typeof parsed.type !== 'string' || !ALLOWED_JSON_TYPES.has(parsed.type)) {
     return { error: `Unknown message type: ${String(parsed.type)}`, code: 1008 };
   }
 
@@ -23,7 +24,11 @@ function parseAndValidateMessage(rawBuffer) {
     if (typeof parsed.roomId !== 'string' || parsed.roomId.trim().length === 0 || parsed.roomId.length > 48) {
       return { error: 'Invalid roomId in join message', code: 1008 };
     }
-    if (typeof parsed.playerName !== 'string' || parsed.playerName.trim().length === 0 || parsed.playerName.length > 24) {
+    if (
+      typeof parsed.playerName !== 'string' ||
+      parsed.playerName.trim().length === 0 ||
+      parsed.playerName.length > 24
+    ) {
       return { error: 'Invalid playerName in join message', code: 1008 };
     }
   }
@@ -37,7 +42,7 @@ function parseAndValidateMessage(rawBuffer) {
   return { data: parsed };
 }
 
-export function attachWebSocketServer(httpServer, roomManager, config) {
+export function attachWebSocketServer(httpServer, roomManager, config, netSim) {
   const wss = new WebSocketServer({
     noServer: true,
     maxPayload: config.maxPayloadBytes,
@@ -53,24 +58,37 @@ export function attachWebSocketServer(httpServer, roomManager, config) {
       return;
     }
 
+    const useJsonCodec = url.searchParams.get('codec') === 'json';
+    const qLat = url.searchParams.get('latency');
+    const qJit = url.searchParams.get('jitter');
+    const qDrop = url.searchParams.get('drop');
+    if (qLat !== null || qJit !== null || qDrop !== null) {
+      netSim.update({
+        latencyMs: qLat !== null ? Number(qLat) : undefined,
+        jitterMs: qJit !== null ? Number(qJit) : undefined,
+        dropPct: qDrop !== null ? Number(qDrop) : undefined,
+      });
+    }
+
     wss.handleUpgrade(req, socket, head, (ws) => {
-      wss.emit('connection', ws, req);
+      wss.emit('connection', ws, { useJsonCodec });
     });
   });
 
-  wss.on('connection', (ws) => {
+  wss.on('connection', (ws, { useJsonCodec = false } = {}) => {
     const client = {
       id: randomUUID().slice(0, 8),
       ws,
       name: null,
       room: null,
+      shipId: null,
+      useJsonCodec,
       missedPongs: 0,
       windowStart: Date.now(),
       msgCount: 0,
     };
     sessions.set(ws, client);
 
-    // Якщо клієнт не надіслав валідний join за 5 с — закриваємо сокет
     const joinTimer = setTimeout(() => {
       if (!client.room && ws.readyState === 1) {
         ws.close(4001, 'Join timeout (5s)');
@@ -82,12 +100,6 @@ export function attachWebSocketServer(httpServer, roomManager, config) {
     });
 
     ws.on('message', (rawData, isBinary) => {
-      if (isBinary) {
-        ws.close(1003, 'Binary frames not supported');
-        return;
-      }
-
-      // Rate limit: максимум config.rateLimitPerSec повідомлень на секунду
       const now = Date.now();
       if (now - client.windowStart >= 1000) {
         client.windowStart = now;
@@ -99,9 +111,69 @@ export function attachWebSocketServer(httpServer, roomManager, config) {
         return;
       }
 
-      const { data, error, code } = parseAndValidateMessage(rawData);
+      // 1. Бінарний трафік (ArrayBuffer / DataView)
+      if (isBinary) {
+        let packet;
+        try {
+          packet = decodeBinaryPacket(rawData);
+        } catch (err) {
+          ws.close(1003, err.message);
+          return;
+        }
+
+        if (packet.kind === 'ping') {
+          netSim.schedule(() => {
+            if (ws.readyState === 1) {
+              ws.send(encodePingPongBinary(MSG_TYPE.PONG, packet.clientTimeMs));
+            }
+          });
+          return;
+        }
+
+        if (packet.kind === 'input') {
+          if (!client.room) {
+            ws.close(1008, 'Must join a room before sending input');
+            return;
+          }
+          const valid = validateInputPacket(packet);
+          if (!valid) {
+            ws.close(1008, 'Invalid input values');
+            return;
+          }
+          client.room.handleClientInput(client, valid);
+          return;
+        }
+
+        ws.close(1003, 'Unexpected binary frame type');
+        return;
+      }
+
+      // 2. Текстові JSON-повідомлення (join, chat, leave, налаштування netSim або JSON-режим)
+      const { data, error, code } = parseJsonControlMessage(rawData);
       if (error) {
         ws.close(code, error);
+        return;
+      }
+
+      if (data.type === 'ping') {
+        netSim.schedule(() => {
+          if (ws.readyState === 1) {
+            ws.send(JSON.stringify({ type: 'pong', clientTimeMs: Number(data.clientTimeMs) || 0 }));
+          }
+        });
+        return;
+      }
+
+      if (data.type === 'net-sim') {
+        const updated = netSim.update(data);
+        if (client.room) {
+          client.room.broadcast({ type: 'net-sim', ...updated });
+        }
+        return;
+      }
+
+      if (data.type === 'codec') {
+        client.useJsonCodec = data.codec === 'json';
         return;
       }
 
@@ -110,6 +182,9 @@ export function attachWebSocketServer(httpServer, roomManager, config) {
         if (client.room) {
           client.room.removeClient(client.id);
           client.room = null;
+        }
+        if (data.codec === 'json' || data.codec === 'binary') {
+          client.useJsonCodec = data.codec === 'json';
         }
         client.name = data.playerName.trim();
         const room = roomManager.getOrCreateRoom(data.roomId.trim());
@@ -131,7 +206,14 @@ export function attachWebSocketServer(httpServer, roomManager, config) {
         return;
       }
 
-      if (data.type === 'chat') {
+      if (data.type === 'input') {
+        const valid = validateInputPacket(data);
+        if (!valid) {
+          ws.close(1008, 'Invalid JSON input values');
+          return;
+        }
+        client.room.handleClientInput(client, valid);
+      } else if (data.type === 'chat') {
         client.room.postChat(client.id, data.text.trim());
       } else if (data.type === 'leave') {
         client.room.removeClient(client.id);
@@ -154,7 +236,6 @@ export function attachWebSocketServer(httpServer, roomManager, config) {
     });
   });
 
-  // Heartbeat: ping раз на 15 с, два пропущені pong -> розрив
   const heartbeatInterval = setInterval(() => {
     for (const [ws, client] of sessions.entries()) {
       if (client.missedPongs >= 2) {

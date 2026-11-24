@@ -1,13 +1,25 @@
-﻿import { EventEmitter } from 'node:events';
+import { EventEmitter } from 'node:events';
+import { AuthoritativeMatch } from './match.js';
 import { MatchLogger } from './matchLog.js';
 
 export class Room extends EventEmitter {
   #clients = new Map();
   #chatHistory = [];
   #logger;
+  #match;
   #maxBufferedBytes;
+  #netSim;
 
-  constructor({ id, name, asteroidCount = 6, homingRatio = 0.3, maxPlayers = 8, logDir, maxBufferedBytes = 65536 }) {
+  constructor({
+    id,
+    name,
+    asteroidCount = 6,
+    homingRatio = 0.3,
+    maxPlayers = 8,
+    logDir,
+    maxBufferedBytes = 65536,
+    netSim,
+  }) {
     super();
     this.id = id;
     this.name = name;
@@ -15,18 +27,35 @@ export class Room extends EventEmitter {
     this.homingRatio = homingRatio;
     this.maxPlayers = maxPlayers;
     this.#maxBufferedBytes = maxBufferedBytes;
+    this.#netSim = netSim;
     this.#logger = new MatchLogger(logDir, id);
 
-    // Обов'язковий слухач 'error', щоб EventEmitter не впав із необробленим винятком
+    const seed = Math.floor(Math.random() * 0xffffffff) >>> 0;
+    this.#match = new AuthoritativeMatch({
+      seed,
+      asteroidCount,
+      homingRatio,
+      onBroadcastTick: (match, events) => this.#broadcastSnapshots(match, events),
+    });
+
     this.on('error', (err) => {
       console.error(`[Room:${this.id}] emitter error:`, err.message);
     });
 
-    this.#logger.write({ type: 'room-created', roomId: this.id, name: this.name });
+    this.#match.start();
+    this.#logger.write({ type: 'room-created', roomId: this.id, name: this.name, seed });
   }
 
   get playerCount() {
     return this.#clients.size;
+  }
+
+  getMatchStats() {
+    return {
+      roomId: this.id,
+      name: this.name,
+      ...this.#match.getStats(),
+    };
   }
 
   toSummary() {
@@ -41,19 +70,31 @@ export class Room extends EventEmitter {
   }
 
   getRoster() {
-    return [...this.#clients.values()].map((c) => ({ id: c.id, name: c.name }));
+    return [...this.#clients.values()].map((c) => ({ id: c.id, shipId: c.shipId, name: c.name }));
   }
 
   addClient(client) {
     if (this.#clients.size >= this.maxPlayers) {
       return false;
     }
+    client.shipId = this.#match.addPlayer(client.name);
     this.#clients.set(client.id, client);
-    this.#logger.write({ type: 'join', roomId: this.id, clientId: client.id, playerName: client.name });
+    this.#logger.write({
+      type: 'join',
+      roomId: this.id,
+      clientId: client.id,
+      shipId: client.shipId,
+      playerName: client.name,
+    });
     this.emit('player-joined', client);
 
     this.sendToClient(client, {
       type: 'joined',
+      shipId: client.shipId,
+      seed: this.#match.seed,
+      tickRate: 30,
+      codec: client.useJsonCodec ? 'json' : 'binary',
+      netSim: this.#netSim.getSettings(),
       room: this.toSummary(),
       roster: this.getRoster(),
       history: this.#chatHistory.slice(-20),
@@ -71,9 +112,20 @@ export class Room extends EventEmitter {
     return true;
   }
 
+  handleClientInput(client, validatedInput) {
+    if (!client.shipId) return;
+    this.#netSim.schedule(() => {
+      if (!this.#clients.has(client.id)) return;
+      this.#match.queueInput(client.shipId, validatedInput);
+    });
+  }
+
   removeClient(clientId) {
     const client = this.#clients.get(clientId);
     if (!client) return;
+    if (client.shipId) {
+      this.#match.removePlayer(client.shipId);
+    }
     this.#clients.delete(clientId);
     this.#logger.write({ type: 'leave', roomId: this.id, clientId: client.id, playerName: client.name });
     this.emit('player-left', client);
@@ -108,12 +160,32 @@ export class Room extends EventEmitter {
     this.broadcast(message);
   }
 
+  #broadcastSnapshots(match, events) {
+    if (this.#clients.size === 0) return;
+
+    for (const client of this.#clients.values()) {
+      if (client.ws.readyState !== 1) continue;
+      if (client.ws.bufferedAmount > this.#maxBufferedBytes) continue;
+
+      const payload = match.buildPersonalizedSnapshot(client.shipId, {
+        binary: !client.useJsonCodec,
+      });
+
+      this.#netSim.schedule(() => {
+        if (client.ws.readyState === 1 && client.ws.bufferedAmount <= this.#maxBufferedBytes) {
+          client.ws.send(payload);
+        }
+      });
+    }
+
+    if (events.length > 0) {
+      this.broadcast({ type: 'events', events });
+    }
+  }
+
   sendToClient(client, payload) {
     if (client.ws.readyState !== 1) return;
-    // Backpressure: якщо клієнт не встигає вичитувати сокет, пропускаємо необов'язковий пакет
-    if (client.ws.bufferedAmount > this.#maxBufferedBytes) {
-      return;
-    }
+    if (client.ws.bufferedAmount > this.#maxBufferedBytes) return;
     client.ws.send(JSON.stringify(payload));
   }
 
@@ -127,6 +199,7 @@ export class Room extends EventEmitter {
   }
 
   async close() {
+    this.#match.stop();
     for (const client of this.#clients.values()) {
       if (client.ws.readyState === 1) {
         client.ws.close(1001, 'Room closed');
@@ -147,9 +220,11 @@ export class RoomManager {
   #activeRooms = new Map();
   #customTemplates = new Map();
   #config;
+  #netSim;
 
-  constructor(config) {
+  constructor(config, netSim) {
     this.#config = config;
+    this.#netSim = netSim;
     for (const tpl of PRESET_TEMPLATES) {
       this.#customTemplates.set(tpl.id, tpl);
     }
@@ -171,6 +246,10 @@ export class RoomManager {
     }
 
     return result;
+  }
+
+  getAllMatchStats() {
+    return [...this.#activeRooms.values()].map((r) => r.getMatchStats());
   }
 
   createTemplate({ name, asteroidCount = 6, homingRatio = 0.3, maxPlayers = 8 }) {
@@ -202,9 +281,9 @@ export class RoomManager {
       ...tpl,
       logDir: this.#config.logDir,
       maxBufferedBytes: this.#config.maxBufferedBytes,
+      netSim: this.#netSim,
     });
 
-    // Порожня кімната автоматично видаляється з активних та закриває свій потік логу
     room.once('empty', async () => {
       this.#activeRooms.delete(room.id);
       await room.close();

@@ -35,7 +35,9 @@
     const { rooms, selectedRoomId } = event.detail;
     statusEl.textContent = '';
     joinBtn.disabled = rooms.length === 0;
-    roomListEl.innerHTML = rooms.map((room) => `
+    roomListEl.innerHTML = rooms
+      .map(
+        (room) => `
       <div class="room-item ${room.id === selectedRoomId ? 'selected' : ''}" data-room-id="${room.id}">
         <div>
           <strong>${room.name}</strong>
@@ -43,10 +45,14 @@
         </div>
         <div>${room.players}/${room.maxPlayers} pilots</div>
       </div>
-    `).join('');
+    `,
+      )
+      .join('');
   };
 
-  const onError = (event) => { statusEl.textContent = `Server notice: ${event.detail.message}`; };
+  const onError = (event) => {
+    statusEl.textContent = `Server notice: ${event.detail.message}`;
+  };
   const onRoomClick = (event) => {
     const card = event.target.closest('[data-room-id]');
     if (!card) return;
@@ -54,7 +60,10 @@
     lobby.selectRoom(card.dataset.roomId);
   };
   const onNameInput = () => lobby.setPlayerName(nameInput.value);
-  const onRefreshClick = () => { onUserGesture?.(); lobby.refresh(); };
+  const onRefreshClick = () => {
+    onUserGesture?.();
+    lobby.refresh();
+  };
 
   const onCreateRoom = async () => {
     const name = newRoomInput.value.trim();
@@ -102,7 +111,11 @@
     }
   };
 
-  const onJoinClick = () => { onUserGesture?.(); lobby.setPlayerName(nameInput.value); lobby.join(); };
+  const onJoinClick = () => {
+    onUserGesture?.();
+    lobby.setPlayerName(nameInput.value);
+    lobby.join();
+  };
 
   const onJoinComplete = () => {
     root.classList.remove('visible');
