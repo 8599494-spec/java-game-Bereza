@@ -1,6 +1,6 @@
 {
   "name": "java-game-bereza",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "private": true,
   "type": "module",
   "workspaces": [
@@ -13,13 +13,19 @@
     "dev:client": "npm --workspace=client run dev",
     "build": "npm --workspace=client run build",
     "start": "npm --workspace=server run start",
-    "test": "node --test shared/test/*.test.js",
-    "bench:codec": "node shared/scripts/bench-codec.mjs",
+    "typecheck": "npm --workspace=shared run typecheck && npm --workspace=server run typecheck && npm --workspace=client run typecheck",
+    "test": "node --test shared/test/*.test.ts",
+    "bench:codec": "node shared/scripts/bench-codec.ts",
     "bench:rss": "node server/scripts/bench-stream-rss.mjs",
-    "gen:gif": "node shared/scripts/generate-demo-gif.mjs",
+    "gen:gif": "node shared/scripts/generate-demo-gif.ts",
     "check": "biome check --write ./shared/src ./shared/test ./shared/scripts ./client/src ./server/src ./server/scripts"
   },
   "devDependencies": {
-    "@biomejs/biome": "^1.9.4"
+    "@biomejs/biome": "^1.9.4",
+    "@types/node": "^22.0.0",
+    "typescript": "^5.7.0"
+  },
+  "dependencies": {
+    "zod": "^3.24.0"
   }
 }

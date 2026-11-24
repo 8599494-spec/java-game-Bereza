@@ -1,222 +1,67 @@
 <!doctype html>
-<html lang="uk">
+<html lang="en">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Space Dogfight — Lab 05 Authoritative Netcode</title>
-    <style>
-      * { box-sizing: border-box; }
-      body {
-        margin: 0;
-        min-height: 100vh;
-        display: grid;
-        place-items: center;
-        background: #050811;
-        color: #e2e8f0;
-        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-      }
-      .stage {
-        position: relative;
-        width: 900px;
-        height: 600px;
-        border: 1px solid #1e293b;
-        box-shadow: 0 20px 50px rgba(0, 0, 0, 0.65);
-        overflow: hidden;
-      }
-      canvas { display: block; width: 900px; height: 600px; }
-      #lobby-root {
-        position: absolute;
-        inset: 0;
-        display: none;
-        align-items: center;
-        justify-content: center;
-        background: rgba(5, 8, 17, 0.92);
-        padding: 20px;
-      }
-      #lobby-root.visible { display: flex; }
-      .lobby-card {
-        width: 100%;
-        max-width: 640px;
-        background: #0f172a;
-        border: 1px solid #334155;
-        border-radius: 10px;
-        padding: 22px;
-      }
-      .lobby-title { margin: 0 0 4px; font-size: 20px; color: #38bdf8; }
-      .lobby-sub { margin: 0 0 14px; font-size: 12px; color: #94a3b8; }
-      .field-row { display: flex; gap: 8px; margin-bottom: 12px; }
-      .field-row input {
-        flex: 1;
-        background: #020617;
-        border: 1px solid #334155;
-        color: #f8fafc;
-        padding: 9px 12px;
-        border-radius: 6px;
-        font-family: inherit;
-      }
-      .btn {
-        background: #0284c7;
-        color: #fff;
-        border: none;
-        border-radius: 6px;
-        padding: 9px 14px;
-        font-family: inherit;
-        font-weight: bold;
-        cursor: pointer;
-      }
-      .btn:hover { background: #0369a1; }
-      .btn:disabled { opacity: 0.45; cursor: not-allowed; }
-      .btn-secondary { background: #1e293b; color: #cbd5e1; }
-      .btn-secondary:hover { background: #334155; }
-      .room-list { display: grid; gap: 8px; margin-bottom: 14px; max-height: 210px; overflow-y: auto; }
-      .room-item {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        padding: 10px 12px;
-        border-radius: 8px;
-        border: 1px solid #1e293b;
-        background: #020617;
-        cursor: pointer;
-      }
-      .room-item.selected { border-color: #38bdf8; background: #0c192e; }
-      .room-meta { font-size: 11px; color: #94a3b8; margin-top: 3px; }
-      .lobby-status { font-size: 12px; color: #f87171; min-height: 16px; margin-bottom: 8px; }
-      .replay-box {
-        background: #020617;
-        border: 1px solid #1e293b;
-        border-radius: 6px;
-        padding: 8px 10px;
-        font-size: 11px;
-        color: #94a3b8;
-        max-height: 95px;
-        overflow-y: auto;
-        margin-bottom: 12px;
-        white-space: pre-wrap;
-      }
-      #retry-overlay {
-        position: absolute;
-        left: 50%;
-        bottom: 56px;
-        transform: translateX(-50%);
-        display: none;
-        gap: 10px;
-      }
-      #retry-overlay.visible { display: flex; }
-      #net-controls {
-        position: absolute;
-        left: 14px;
-        bottom: 14px;
-        width: 258px;
-        background: rgba(2, 6, 23, 0.84);
-        border: 1px solid #334155;
-        border-radius: 8px;
-        padding: 8px 10px;
-        font-size: 11px;
-        display: none;
-        flex-direction: column;
-        gap: 6px;
-      }
-      #net-controls.visible { display: flex; }
-      .ctrl-row { display: flex; justify-content: space-between; align-items: center; gap: 6px; }
-      .ctrl-row input[type="range"] { width: 105px; }
-      .mini-btn {
-        background: #1e293b;
-        color: #e2e8f0;
-        border: 1px solid #334155;
-        border-radius: 4px;
-        padding: 3px 7px;
-        font-family: inherit;
-        font-size: 10px;
-        cursor: pointer;
-      }
-      .mini-btn.active { background: #0284c7; border-color: #38bdf8; }
-      .mini-btn.danger { background: #be123c; border-color: #f43f5e; }
-      #chat-hud {
-        position: absolute;
-        right: 14px;
-        bottom: 14px;
-        width: 300px;
-        background: rgba(2, 6, 23, 0.82);
-        border: 1px solid #1e293b;
-        border-radius: 8px;
-        padding: 8px;
-        display: none;
-        flex-direction: column;
-        gap: 6px;
-      }
-      #chat-hud.visible { display: flex; }
-      .chat-header {
-        display: flex;
-        justify-content: space-between;
-        font-size: 11px;
-        color: #94a3b8;
-      }
-      .chat-messages {
-        height: 95px;
-        overflow-y: auto;
-        font-size: 11px;
-        line-height: 1.4;
-        display: flex;
-        flex-direction: column;
-        gap: 3px;
-      }
-      .chat-msg-sys { color: #38bdf8; }
-      .chat-msg-user strong { color: #f59e0b; }
-      #chat-input {
-        width: 100%;
-        background: #0f172a;
-        border: 1px solid #334155;
-        color: #f8fafc;
-        padding: 6px 8px;
-        border-radius: 4px;
-        font-family: inherit;
-        font-size: 12px;
-      }
-    </style>
+    <title>Space Dogfight — Lab 06 TypeScript Multiplayer</title>
+    <link rel="stylesheet" href="/src/style.css" />
   </head>
   <body>
-    <div class="stage">
-      <canvas id="game" width="900" height="600"></canvas>
-      <div id="retry-overlay">
-        <button id="retry-btn" class="btn" type="button">Retry Loading</button>
-        <button id="fallback-btn" class="btn btn-secondary" type="button">Start Without Failed Assets</button>
-      </div>
-      <div id="lobby-root"></div>
+    <div id="app">
+      <header class="topbar">
+        <div class="brand">
+          <span class="dot"></span>
+          <strong>SPACE DOGFIGHT</strong>
+          <span class="badge">TS STRICT · 30Hz AUTH</span>
+        </div>
+        <div id="statusBar" class="status">Disconnected</div>
+      </header>
 
-      <div id="net-controls">
-        <div class="ctrl-row">
-          <span>Latency: <strong id="lat-val">0</strong> ms</span>
-          <input id="lat-slider" type="range" min="0" max="250" step="10" value="0" />
-        </div>
-        <div class="ctrl-row">
-          <span>Jitter: <strong id="jit-val">0</strong> ms</span>
-          <input id="jit-slider" type="range" min="0" max="60" step="5" value="0" />
-        </div>
-        <div class="ctrl-row">
-          <span>Drop: <strong id="drop-val">0</strong>%</span>
-          <input id="drop-slider" type="range" min="0" max="15" step="1" value="0" />
-        </div>
-        <div class="ctrl-row">
-          <span>Interp delay: <strong id="interp-val">100</strong> ms</span>
-          <input id="interp-slider" type="range" min="0" max="220" step="10" value="100" />
-        </div>
-        <div class="ctrl-row" style="margin-top: 2px;">
-          <button id="toggle-pred-btn" class="mini-btn active" type="button">Predict: ON</button>
-          <button id="toggle-codec-btn" class="mini-btn active" type="button">Codec: BIN</button>
-          <button id="toggle-bug-btn" class="mini-btn" type="button">RandBug: OFF</button>
-        </div>
-      </div>
+      <section id="lobbyPanel" class="panel lobby">
+        <h2>Join Arena</h2>
+        <form id="joinForm" class="join-form">
+          <label>
+            Pilot Callsign
+            <input id="playerNameInput" type="text" maxlength="20" value="Viper" required />
+          </label>
+          <label>
+            Sector / Room
+            <input id="roomNameInput" type="text" maxlength="24" value="Sector Alpha" required />
+          </label>
+          <button type="submit" id="connectBtn">Launch Ship</button>
+        </form>
+        <p class="hint">
+          Controls: <b>W / ↑</b> Thrust · <b>A/D or ←/→</b> Turn · <b>Space</b> Laser · <b>Shift / E</b> Homing Missile
+        </p>
+      </section>
 
-      <div id="chat-hud">
-        <div class="chat-header">
-          <span id="ws-status">WS: connecting...</span>
-          <span id="room-pilots">Pilots: 1</span>
+      <main id="gameStage" class="stage hidden">
+        <div class="arena-wrap">
+          <canvas id="gameCanvas" width="900" height="600"></canvas>
+          <canvas id="netgraphCanvas" width="270" height="145" class="netgraph-overlay"></canvas>
         </div>
-        <div id="chat-messages" class="chat-messages"></div>
-        <input id="chat-input" type="text" maxlength="200" placeholder="Press Enter to chat..." />
-      </div>
+
+        <aside class="controls-bar">
+          <div class="control-group">
+            <label>Latency: <span id="latencyVal">0</span> ms
+              <input id="latencySlider" type="range" min="0" max="300" step="10" value="0" />
+            </label>
+            <label>Jitter: <span id="jitterVal">0</span> ms
+              <input id="jitterSlider" type="range" min="0" max="100" step="5" value="0" />
+            </label>
+            <label>Drop: <span id="dropVal">0</span>%
+              <input id="dropSlider" type="range" min="0" max="30" step="1" value="0" />
+            </label>
+          </div>
+          <div class="control-group buttons">
+            <button type="button" id="togglePredictBtn" class="toggle active">Predict: ON</button>
+            <button type="button" id="toggleCodecBtn" class="toggle active">Codec: BIN</button>
+            <button type="button" id="toggleRandBugBtn" class="toggle">RandBug: OFF</button>
+            <button type="button" id="disconnectBtn" class="danger">Leave</button>
+          </div>
+        </aside>
+      </main>
     </div>
-    <script type="module" src="/src/main.js"></script>
+    <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

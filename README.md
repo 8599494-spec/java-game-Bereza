@@ -1,3 +1,31 @@
+# Lab 06 — TypeScript: типізація протоколу, симуляції та клієнт-серверної взаємодії
+
+Проєкт переведено на **TypeScript** (`"strict": true`, `"noUncheckedIndexedAccess": true`, `"verbatimModuleSyntax": true`) у всіх трьох воркспейсах (`shared/`, `server/`, `client/`) із перевіркою типів у CI (`.github/workflows/ci.yml`). Поведінка під час виконання залишилася незмінною — тест детермінізму симуляції проходить на 100%.
+
+## 1. Які помилки знайшов TypeScript (What TypeScript found)
+
+1. **Неперевірені звернення до `Map.get()` та індексів масиву (`noUncheckedIndexedAccess`):** у `EntityInterpolator` (`buffer[0]`, `buffer[1]`) та `AuthoritativeMatch` (`pendingInputs.get(ship.id)`) TypeScript виявив потенційний `undefined` під час розриву з’єднання або порожнього буфера знімків, що раніше могло призвести до `Cannot read properties of undefined`.
+2. **Небезпечний вхід із мережі (`JSON.parse` повертає `any`):** без типізації `unknown` на межі WebSocket-сервера поля вхідного пакета могли використовуватися без перевірки типів і діапазонів (наприклад, `turn: 1e9` або відсутнє поле `seq`). Перехід на `unknown` + `ClientMessageSchema.safeParse()` закрив цю діру.
+3. **Плутанина числових ідентифікаторів (`shipId` vs `tick` vs `seq`):** у `buildSnapshotFromWorld` та `LocalShipPredictor` усі ідентифікатори й номери кроків були звичайними `number`. Branded-типи (`EntityId`, `Tick`, `Seq`) одразу підсвітили місця, де замість `lastProcessedSeq` випадково передавався `tick`.
+4. **Неперевірені DOM-елементи та `CanvasRenderingContext2D`:** `document.getElementById(...)` та `canvas.getContext('2d')` повертають `null`, що змусило винести безпечну перевірку в узагальнений `requireElement<T>()`.
+5. **Опціональні поля в об’єктах введення (`fireHoming`):** при порівнянні клієнтського та серверного `InputMessage` компілятор виявив розбіжність між необов’язковим полем у сирому JSON та обов’язковим булевим прапорцем у симуляції.
+
+## 2. Три найцікавіші типи простими словами
+
+1. **Дискриміноване об’єднання + `never` (`ClientMessage` та `SnapshotEntity`):**
+   Це набір варіантів об’єктів, у кожного з яких є спільне поле-мітка (`type: 'join' | 'input' | 'ping' | 'netConfig'` або `kind: 'ship' | 'asteroid' | 'bullet'`). Коли ми пишемо `switch (entity.kind)`, TypeScript у кожній гілці `case` точно знає, які поля є в об’єкта (наприклад, `hp` є тільки в `'ship'`, а `radius` — тільки в `'asteroid'`). У гілці `default` змінна має тип `never` («такого не може бути»): якщо додати новий тип сутності чи повідомлення і забути обробити його у `switch`, компілятор одразу зупинить збірку.
+2. **Branded-типи (`EntityId`, `Tick`, `Seq`, `RoomId`):**
+   У JavaScript і ID корабля, і номер кадру, і номер пакета — це звичайні числа (`number`), тому їх легко переплутати місцями в аргументах функції. Branded-тип (`number & { readonly __brand: 'EntityId' }`) приклеює до числа «невидиму наліпку» лише на етапі компіляції. У рантаймі це залишається звичайним швидким числом без жодних обгорток, але TypeScript не дозволить передати `Tick` туди, де очікується `EntityId`.
+3. **Узагальнена типізована шина подій (`Bus<GameEvents>` / `TypedEventEmitter<RoomEvents>`):**
+   Замість звичайного `EventEmitter`, де назва події — довільний рядок, а дані мають тип `any`, ми описуємо словник подій `type GameEvents = { connected: { roomId: RoomId; shipId: EntityId }; ... }`. Завдяки `K extends keyof E` та `payload: E[K]` редактор сам підказує доступні назви подій і перевіряє, чи правильний об’єкт передано в `emit()` і отримано в `on()`.
+
+## 3. Рішення щодо UI-фреймворку для лобі та HUD
+
+Для лобі та панелі керування мережею ми свідомо залишили **чистий TypeScript без зовнішнього UI-фреймворку** (React/Vue/Svelte), а ігрове поле `<canvas>` і цикл `requestAnimationFrame` — нативними:
+- **Чому без фреймворку:** інтерфейс містить лише форму входу, рядок статусу та 6 елементів керування параметрами мережі (`Latency`, `Jitter`, `Drop`, `Predict`, `Codec`, `RandBug`), які змінюються лише за дією користувача, тоді як гра рендериться на `<canvas>` 60 разів на секунду. Відмова від фреймворку дає миттєву збірку Vite (`< 15 KB` бандлу) і нульові накладні витрати на Virtual DOM під час бою.
+- **Як забезпечено архітектурну чистоту:** лобі та статус підписані на типізовану шину `Bus<GameEvents>`, тому стан мережі повністю відокремлений від рендерера та симуляції — за потреби лобі можна легко замінити на React або Svelte без зміни ігрового ядра.
+
+---
 # Space Dogfight — Multiplayer Browser & Node.js Game
 
 ![Two-player authoritative server dogfight with Netgraph](docs/demo-lab05.gif)
