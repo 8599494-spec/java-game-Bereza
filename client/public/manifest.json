@@ -1,0 +1,13 @@
+{
+  "images": {
+    "spritesheet": "/assets/spritesheet.png"
+  },
+  "audio": {
+    "fire": "/assets/sfx-fire.wav",
+    "hit": "/assets/sfx-hit.wav",
+    "explosion": "/assets/sfx-explosion.wav"
+  },
+  "json": {
+    "rooms": "/api/rooms"
+  }
+}

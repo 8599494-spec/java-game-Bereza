@@ -1,4 +1,4 @@
-﻿export function createRenderer(canvas, arena) {
+export function createRenderer(canvas, arena) {
 	const ctx = canvas.getContext("2d");
 	let spriteSheet = null;
 

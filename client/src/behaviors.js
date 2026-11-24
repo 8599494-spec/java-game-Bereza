@@ -1,4 +1,4 @@
-﻿import { Entity } from "./entity.js";
+import { Entity } from "./entity.js";
 import { Vector2 } from "./vector2.js";
 
 function wrapCoord(value, max) {

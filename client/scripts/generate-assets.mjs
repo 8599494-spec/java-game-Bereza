@@ -1,4 +1,4 @@
-﻿import fs from 'node:fs';
+import fs from 'node:fs';
 import path from 'node:path';
 import zlib from 'node:zlib';
 
@@ -170,5 +170,4 @@ fs.writeFileSync(path.join('public', 'api', 'rooms.json'), JSON.stringify([
   { id: 'swarm-core', name: 'Homing Swarm Core', asteroidCount: 10, homingRatio: 0.65, players: 5, maxPlayers: 8 },
 ], null, 2));
 
-node -v | Out-Null
-Write-Host "Assets & config generated!"
+console.log('OK: manifest.json, rooms.json, spritesheet.png and 3 WAV files created!');

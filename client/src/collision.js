@@ -1,4 +1,4 @@
-﻿import { createExplosion, createPickup } from "./behaviors.js";
+import { createExplosion, createPickup } from "./behaviors.js";
 
 export function circlesOverlap(a, b) {
 	return a.pos.distanceTo(b.pos) < a.radius + b.radius;

@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Space Dogfight — Lab 03</title>
+    <title>Space Dogfight — Lab 04</title>
     <style>
       * { box-sizing: border-box; }
       body {
@@ -21,6 +21,7 @@
         height: 600px;
         border: 1px solid #1e293b;
         box-shadow: 0 20px 50px rgba(0, 0, 0, 0.65);
+        overflow: hidden;
       }
       canvas { display: block; width: 900px; height: 600px; }
       #lobby-root {
@@ -29,27 +30,27 @@
         display: none;
         align-items: center;
         justify-content: center;
-        background: rgba(5, 8, 17, 0.9);
-        padding: 24px;
+        background: rgba(5, 8, 17, 0.92);
+        padding: 20px;
       }
       #lobby-root.visible { display: flex; }
       .lobby-card {
         width: 100%;
-        max-width: 580px;
+        max-width: 640px;
         background: #0f172a;
         border: 1px solid #334155;
         border-radius: 10px;
-        padding: 24px;
+        padding: 22px;
       }
-      .lobby-title { margin: 0 0 6px; font-size: 20px; color: #38bdf8; }
-      .lobby-sub { margin: 0 0 18px; font-size: 13px; color: #94a3b8; }
-      .field-row { display: flex; gap: 10px; margin-bottom: 16px; }
+      .lobby-title { margin: 0 0 4px; font-size: 20px; color: #38bdf8; }
+      .lobby-sub { margin: 0 0 14px; font-size: 12px; color: #94a3b8; }
+      .field-row { display: flex; gap: 8px; margin-bottom: 12px; }
       .field-row input {
         flex: 1;
         background: #020617;
         border: 1px solid #334155;
         color: #f8fafc;
-        padding: 10px 12px;
+        padding: 9px 12px;
         border-radius: 6px;
         font-family: inherit;
       }
@@ -58,7 +59,7 @@
         color: #fff;
         border: none;
         border-radius: 6px;
-        padding: 10px 16px;
+        padding: 9px 14px;
         font-family: inherit;
         font-weight: bold;
         cursor: pointer;
@@ -67,20 +68,32 @@
       .btn:disabled { opacity: 0.45; cursor: not-allowed; }
       .btn-secondary { background: #1e293b; color: #cbd5e1; }
       .btn-secondary:hover { background: #334155; }
-      .room-list { display: grid; gap: 10px; margin-bottom: 18px; }
+      .room-list { display: grid; gap: 8px; margin-bottom: 14px; max-height: 210px; overflow-y: auto; }
       .room-item {
         display: flex;
         justify-content: space-between;
         align-items: center;
-        padding: 12px 14px;
+        padding: 10px 12px;
         border-radius: 8px;
         border: 1px solid #1e293b;
         background: #020617;
         cursor: pointer;
       }
       .room-item.selected { border-color: #38bdf8; background: #0c192e; }
-      .room-meta { font-size: 12px; color: #94a3b8; margin-top: 4px; }
-      .lobby-status { font-size: 12px; color: #f87171; min-height: 18px; margin-bottom: 10px; }
+      .room-meta { font-size: 11px; color: #94a3b8; margin-top: 3px; }
+      .lobby-status { font-size: 12px; color: #f87171; min-height: 16px; margin-bottom: 8px; }
+      .replay-box {
+        background: #020617;
+        border: 1px solid #1e293b;
+        border-radius: 6px;
+        padding: 8px 10px;
+        font-size: 11px;
+        color: #94a3b8;
+        max-height: 95px;
+        overflow-y: auto;
+        margin-bottom: 12px;
+        white-space: pre-wrap;
+      }
       #retry-overlay {
         position: absolute;
         left: 50%;
@@ -90,6 +103,47 @@
         gap: 10px;
       }
       #retry-overlay.visible { display: flex; }
+      #chat-hud {
+        position: absolute;
+        right: 14px;
+        bottom: 34px;
+        width: 310px;
+        background: rgba(2, 6, 23, 0.78);
+        border: 1px solid #1e293b;
+        border-radius: 8px;
+        padding: 8px;
+        display: none;
+        flex-direction: column;
+        gap: 6px;
+      }
+      #chat-hud.visible { display: flex; }
+      .chat-header {
+        display: flex;
+        justify-content: space-between;
+        font-size: 11px;
+        color: #94a3b8;
+      }
+      .chat-messages {
+        height: 110px;
+        overflow-y: auto;
+        font-size: 11px;
+        line-height: 1.4;
+        display: flex;
+        flex-direction: column;
+        gap: 3px;
+      }
+      .chat-msg-sys { color: #38bdf8; }
+      .chat-msg-user strong { color: #f59e0b; }
+      #chat-input {
+        width: 100%;
+        background: #0f172a;
+        border: 1px solid #334155;
+        color: #f8fafc;
+        padding: 6px 8px;
+        border-radius: 4px;
+        font-family: inherit;
+        font-size: 12px;
+      }
     </style>
   </head>
   <body>
@@ -100,6 +154,14 @@
         <button id="fallback-btn" class="btn btn-secondary" type="button">Start Without Failed Assets</button>
       </div>
       <div id="lobby-root"></div>
+      <div id="chat-hud">
+        <div class="chat-header">
+          <span id="ws-status">WS: connecting...</span>
+          <span id="room-pilots">Pilots: 1</span>
+        </div>
+        <div id="chat-messages" class="chat-messages"></div>
+        <input id="chat-input" type="text" maxlength="200" placeholder="Press Enter to chat..." />
+      </div>
     </div>
     <script type="module" src="/src/main.js"></script>
   </body>

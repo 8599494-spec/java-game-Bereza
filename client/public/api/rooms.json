@@ -1,0 +1,26 @@
+[
+  {
+    "id": "sector-alpha",
+    "name": "Sector Alpha (Training)",
+    "asteroidCount": 5,
+    "homingRatio": 0.25,
+    "players": 2,
+    "maxPlayers": 6
+  },
+  {
+    "id": "belt-omega",
+    "name": "Asteroid Belt Omega",
+    "asteroidCount": 8,
+    "homingRatio": 0.4,
+    "players": 4,
+    "maxPlayers": 8
+  },
+  {
+    "id": "swarm-core",
+    "name": "Homing Swarm Core",
+    "asteroidCount": 10,
+    "homingRatio": 0.65,
+    "players": 5,
+    "maxPlayers": 8
+  }
+]

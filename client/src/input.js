@@ -1,4 +1,4 @@
-﻿export function createInput(target = window) {
+export function createInput(target = window) {
 	const pressed = new Set();
 
 	const onKeyDown = (event) => {

@@ -1,4 +1,4 @@
-﻿import { resolveCollisions } from "./collision.js";
+import { resolveCollisions } from "./collision.js";
 
 export class World {
 	#entities = new Map();

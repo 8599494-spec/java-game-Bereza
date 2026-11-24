@@ -1,4 +1,4 @@
-﻿import { fetchJson } from "./assets.js";
+import { fetchJson } from "./assets.js";
 
 export class Lobby extends EventTarget {
 	#endpoint;

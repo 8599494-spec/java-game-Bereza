@@ -1,4 +1,4 @@
-﻿export function createAudioSystem(audioContext, buffers, eventBus) {
+export function createAudioSystem(audioContext, buffers, eventBus) {
 	let muted = false;
 
 	const unlock = () => {
