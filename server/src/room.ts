@@ -1,16 +1,16 @@
 import {
-  asEntityId,
-  asRoomId,
-  binaryCodec,
   type Codec,
   type EntityId,
-  getCodec,
   type InputMessage,
   type NetConfigMessage,
   type RoomId,
   type ServerMessage,
   TICK_RATE,
   TokenBucketRateLimiter,
+  asEntityId,
+  asRoomId,
+  binaryCodec,
+  getCodec,
 } from '@game/shared';
 import type { WebSocket } from 'ws';
 import { BotController } from './bot.ts';
@@ -31,7 +31,12 @@ export interface PlayerSession {
 export type RoomEvents = {
   playerJoined: { readonly roomId: RoomId; readonly shipId: EntityId; readonly name: string };
   playerLeft: { readonly roomId: RoomId; readonly shipId: EntityId };
-  chatMessage: { readonly roomId: RoomId; readonly fromShipId: EntityId; readonly fromName: string; readonly text: string };
+  chatMessage: {
+    readonly roomId: RoomId;
+    readonly fromShipId: EntityId;
+    readonly fromName: string;
+    readonly text: string;
+  };
   empty: { readonly roomId: RoomId };
 };
 

@@ -3,19 +3,19 @@ import {
   BINARY_MSG_TYPE,
   type ClientMessage,
   type CodecKind,
-  decodeAngleInt16,
-  encodeAngleInt16,
   type InputMessage,
   PROTOCOL_VERSION,
   type PingMessage,
   type PongMessage,
-  parseClientMessage,
-  parseServerMessage,
   type ServerMessage,
   type SnapshotEntity,
   type SnapshotMessage,
+  decodeAngleInt16,
+  encodeAngleInt16,
+  parseClientMessage,
+  parseServerMessage,
 } from './protocol.ts';
-import { asEntityId, asSeq, asTick, type ParseResult, vec2 } from './types.ts';
+import { type ParseResult, asEntityId, asSeq, asTick, vec2 } from './types.ts';
 
 const MAX_ENTITIES_PER_SNAPSHOT = 1024;
 const SNAPSHOT_HEADER_BYTES = 18;

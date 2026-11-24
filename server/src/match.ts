@@ -1,25 +1,22 @@
 import {
+  type EntityId,
+  FIXED_DT,
+  type InputMessage,
+  type Seq,
+  type ShipControlInput,
+  type SnapshotMessage,
+  TICK_RATE,
+  type WorldState,
   addShipToWorld,
   asSeq,
   buildSnapshotFromWorld,
   createWorldState,
-  type EntityId,
-  FIXED_DT,
-  type InputMessage,
   removeShipFromWorld,
-  type Seq,
-  type ShipControlInput,
-  type SnapshotMessage,
   stepWorldState,
-  TICK_RATE,
-  type WorldState,
 } from '@game/shared';
 import type { BotController } from './bot.ts';
 
-export type SnapshotBroadcastHandler = (
-  shipId: EntityId,
-  snapshot: SnapshotMessage,
-) => void;
+export type SnapshotBroadcastHandler = (shipId: EntityId, snapshot: SnapshotMessage) => void;
 
 export interface TickTimingStats {
   readonly p50Ms: number;

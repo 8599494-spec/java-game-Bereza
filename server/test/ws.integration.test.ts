@@ -2,12 +2,12 @@ import type { AddressInfo } from 'node:net';
 import { describe, expect, it } from 'vitest';
 import { WebSocket } from 'ws';
 import {
+  type ServerMessage,
   asRoomId,
   asSeq,
   asTick,
   binaryCodec,
   jsonCodec,
-  type ServerMessage,
 } from '../../shared/src/index.ts';
 import { loadServerConfig } from '../src/config.ts';
 import { createGameHttpServer } from '../src/httpServer.ts';

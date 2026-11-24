@@ -1,8 +1,11 @@
 import fc from 'fast-check';
 import { describe, expect, it } from 'vitest';
 import {
-  addShipToWorld,
   ARENA,
+  FIXED_DT,
+  type SnapshotEntity,
+  type SnapshotMessage,
+  addShipToWorld,
   asEntityId,
   asRadians,
   asSeq,
@@ -11,15 +14,12 @@ import {
   createWorldState,
   decodeSnapshotBinary,
   encodeSnapshotBinary,
-  FIXED_DT,
   getCodec,
   hashWorldState,
   jsonCodec,
   normalizeAngle,
   parseClientMessage,
   parseServerMessage,
-  type SnapshotEntity,
-  type SnapshotMessage,
   stepWorldState,
   vec2,
 } from '../src/index.ts';
@@ -263,7 +263,9 @@ describe('Property-based tests (fast-check)', () => {
               if (!step) continue;
               stepWorldState(
                 w,
-                new Map([[s.id, { seq: asSeq(i + 1), thrust: step.thrust, turn: step.turn, fire: step.fire }]]),
+                new Map([
+                  [s.id, { seq: asSeq(i + 1), thrust: step.thrust, turn: step.turn, fire: step.fire }],
+                ]),
               );
             }
             return hashWorldState(w);

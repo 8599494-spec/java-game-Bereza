@@ -1,13 +1,5 @@
 import { z } from 'zod';
-import {
-  asEntityId,
-  asRadians,
-  asRoomId,
-  asSeq,
-  asTick,
-  type ParseResult,
-  type Radians,
-} from './types.ts';
+import { type ParseResult, type Radians, asEntityId, asRadians, asRoomId, asSeq, asTick } from './types.ts';
 
 export const PROTOCOL_VERSION = 1 as const;
 
@@ -190,7 +182,9 @@ export type ServerMessage = z.infer<typeof ServerMessageSchema>;
 export function parseClientMessage(raw: unknown): ParseResult<ClientMessage> {
   const parsed = ClientMessageSchema.safeParse(raw);
   if (!parsed.success) {
-    const details = parsed.error.issues.map((issue) => `${issue.path.join('.')}: ${issue.message}`).join('; ');
+    const details = parsed.error.issues
+      .map((issue) => `${issue.path.join('.')}: ${issue.message}`)
+      .join('; ');
     return { ok: false, error: details || 'Invalid client message' };
   }
   return { ok: true, value: parsed.data };
@@ -199,7 +193,9 @@ export function parseClientMessage(raw: unknown): ParseResult<ClientMessage> {
 export function parseServerMessage(raw: unknown): ParseResult<ServerMessage> {
   const parsed = ServerMessageSchema.safeParse(raw);
   if (!parsed.success) {
-    const details = parsed.error.issues.map((issue) => `${issue.path.join('.')}: ${issue.message}`).join('; ');
+    const details = parsed.error.issues
+      .map((issue) => `${issue.path.join('.')}: ${issue.message}`)
+      .join('; ');
     return { ok: false, error: details || 'Invalid server message' };
   }
   return { ok: true, value: parsed.data };

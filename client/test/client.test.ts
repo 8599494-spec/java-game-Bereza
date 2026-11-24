@@ -1,12 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import {
+  type EntityId,
+  type RoomId,
+  type SnapshotMessage,
   asEntityId,
   asRadians,
   asSeq,
   asTick,
-  type EntityId,
-  type RoomId,
-  type SnapshotMessage,
   vec2,
 } from '../../shared/src/index.ts';
 import { Bus } from '../src/bus.ts';
@@ -122,7 +122,6 @@ describe('LocalShipPredictor reconciliation & prediction', () => {
     const predictor = new LocalShipPredictor();
     predictor.reconcile(makeShipSnapshot(1, 0, myId, 200, 300));
 
-    // Small 10px server correction -> smoothed via visualOffset
     predictor.reconcile(makeShipSnapshot(2, 0, myId, 210, 300));
     expect(predictor.lastReconcileErrorPx).toBeCloseTo(10, 2);
     const beforeDecay = predictor.getRenderShip(myId)?.pos.x ?? 0;
@@ -132,7 +131,6 @@ describe('LocalShipPredictor reconciliation & prediction', () => {
     const afterDecay = predictor.getRenderShip(myId)?.pos.x ?? 0;
     expect(afterDecay).toBeGreaterThan(205);
 
-    // Large 400px teleport -> instant snap
     predictor.reconcile(makeShipSnapshot(3, 0, myId, 610, 300));
     expect(predictor.getRenderShip(myId)?.pos.x).toBeCloseTo(610, 1);
   });
@@ -157,47 +155,46 @@ describe('EntityInterpolator', () => {
 
   it('excludes local ship and interpolates remote entity halfway between snapshots', () => {
     const interp = new EntityInterpolator();
+    const localShip = {
+      kind: 'ship' as const,
+      id: localId,
+      pos: vec2(50, 50),
+      vel: vec2(0, 0),
+      angle: asRadians(0),
+      alive: true,
+      thrusting: false,
+      hp: 100,
+      score: 0,
+      name: 'Local',
+    };
+    const remoteShipStart = {
+      kind: 'ship' as const,
+      id: remoteId,
+      pos: vec2(100, 200),
+      vel: vec2(100, 0),
+      angle: asRadians(0),
+      alive: true,
+      thrusting: true,
+      hp: 100,
+      score: 0,
+      name: 'Remote',
+    };
     const s1: SnapshotMessage = {
       type: 'snapshot',
       tick: asTick(1),
       lastProcessedSeq: asSeq(0),
       yourShipId: localId,
       serverTimeMs: 1000,
-      entities: [
-        {
-          kind: 'ship',
-          id: localId,
-          pos: vec2(50, 50),
-          vel: vec2(0, 0),
-          angle: asRadians(0),
-          alive: true,
-          thrusting: false,
-          hp: 100,
-          score: 0,
-          name: 'Local',
-        },
-        {
-          kind: 'ship',
-          id: remoteId,
-          pos: vec2(100, 200),
-          vel: vec2(100, 0),
-          angle: asRadians(0),
-          alive: true,
-          thrusting: true,
-          hp: 100,
-          score: 0,
-          name: 'Remote',
-        },
-      ],
+      entities: [localShip, remoteShipStart],
     };
     const s2: SnapshotMessage = {
       ...s1,
       tick: asTick(2),
       serverTimeMs: 1100,
       entities: [
-        s1.entities[0]!,
+        localShip,
         {
-          ...s1.entities[1]!,
+          ...remoteShipStart,
           pos: vec2(200, 200),
         },
       ],
@@ -206,7 +203,6 @@ describe('EntityInterpolator', () => {
     interp.push(s1, 1000);
     interp.push(s2, 1100);
 
-    // At nowMs = 1050 + INTERPOLATION_DELAY_MS -> renderTime = 1050 (alpha = 0.5)
     const sampled = interp.sample(1050 + INTERPOLATION_DELAY_MS, localId);
     expect(sampled).toHaveLength(1);
     expect(sampled[0]?.id).toBe(remoteId);
@@ -215,30 +211,29 @@ describe('EntityInterpolator', () => {
 
   it('interpolates shortest toroidal path across arena edge', () => {
     const interp = new EntityInterpolator();
+    const asteroidStart = {
+      kind: 'asteroid' as const,
+      id: asEntityId(50),
+      pos: vec2(890, 300),
+      vel: vec2(20, 0),
+      angle: asRadians(0),
+      radius: 25,
+      homing: false,
+    };
     const s1: SnapshotMessage = {
       type: 'snapshot',
       tick: asTick(1),
       lastProcessedSeq: asSeq(0),
       yourShipId: localId,
       serverTimeMs: 1000,
-      entities: [
-        {
-          kind: 'asteroid',
-          id: asEntityId(50),
-          pos: vec2(890, 300),
-          vel: vec2(20, 0),
-          angle: asRadians(0),
-          radius: 25,
-          homing: false,
-        },
-      ],
+      entities: [asteroidStart],
     };
     const s2: SnapshotMessage = {
       ...s1,
       tick: asTick(2),
       entities: [
         {
-          ...s1.entities[0]!,
+          ...asteroidStart,
           pos: vec2(10, 300),
         },
       ],
@@ -258,7 +253,7 @@ describe('FrameTimeTracker & Typed Bus', () => {
     expect(tracker.getSummary().sampleCount).toBe(0);
 
     for (let i = 1; i <= 100; i += 1) {
-      tracker.record(i * 0.1); // 0.1ms .. 10.0ms
+      tracker.record(i * 0.1);
     }
 
     const summary = tracker.getSummary();

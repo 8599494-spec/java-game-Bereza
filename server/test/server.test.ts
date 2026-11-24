@@ -2,15 +2,15 @@ import type { AddressInfo } from 'node:net';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   ARENA,
+  FIXED_DT,
+  TICK_RATE,
   asEntityId,
   asRadians,
   asRoomId,
   asSeq,
   asTick,
   createWorldState,
-  FIXED_DT,
   setVec2,
-  TICK_RATE,
 } from '../../shared/src/index.ts';
 import { BotController } from '../src/bot.ts';
 import { loadServerConfig } from '../src/config.ts';

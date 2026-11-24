@@ -1,24 +1,20 @@
 import { ObjectPool } from './pool.ts';
-import { createPrng, type Prng } from './prng.ts';
-import {
-  normalizeAngle,
-  type SnapshotEntity,
-  type SnapshotMessage,
-} from './protocol.ts';
+import { type Prng, createPrng } from './prng.ts';
+import { type SnapshotEntity, type SnapshotMessage, normalizeAngle } from './protocol.ts';
 import { SpatialHash } from './spatialHash.ts';
 import {
+  type EntityId,
+  type MutVec2,
+  type Radians,
+  type Seq,
+  type Tick,
+  type Vector2,
   asEntityId,
   asRadians,
   asSeq,
   asTick,
-  type EntityId,
-  type MutVec2,
   mutVec2,
-  type Radians,
-  type Seq,
   setVec2,
-  type Tick,
-  type Vector2,
 } from './types.ts';
 
 export interface ArenaBounds {
@@ -388,7 +384,7 @@ export function stepWorldState(
 
     if (ast.homing && state.ships.length > 0) {
       let nearest: SimShip | null = null;
-      let bestDist = Infinity;
+      let bestDist = Number.POSITIVE_INFINITY;
       for (let j = 0; j < state.ships.length; j += 1) {
         const s = state.ships[j];
         if (!s || !s.alive) continue;
@@ -522,7 +518,11 @@ export function stepWorldState(
   for (let i = 0; i < state.ships.length; i += 1) {
     const s = state.ships[i];
     if (!s || !s.alive || s.invulnTimer > 0) continue;
-    const candidateAsteroids = state.asteroidGrid.queryRadius(s.pos, SHIP_RADIUS + 30, nearbyAsteroidsScratch);
+    const candidateAsteroids = state.asteroidGrid.queryRadius(
+      s.pos,
+      SHIP_RADIUS + 30,
+      nearbyAsteroidsScratch,
+    );
     for (let j = 0; j < candidateAsteroids.length; j += 1) {
       const ast = candidateAsteroids[j];
       if (!ast || destroyedAsteroidIds.has(ast.id)) continue;

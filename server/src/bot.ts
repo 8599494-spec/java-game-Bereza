@@ -1,13 +1,13 @@
 import {
   ARENA,
-  asSeq,
   type EntityId,
   type InputMessage,
-  normalizeAngle,
   type SimShip,
-  shortestWrapDelta,
   type Tick,
   type WorldState,
+  asSeq,
+  normalizeAngle,
+  shortestWrapDelta,
   wrapDistance,
 } from '@game/shared';
 
@@ -70,7 +70,7 @@ export class BotController {
 
     // 2. Find nearest enemy ship or asteroid target
     let target: SimShip | null = null;
-    let bestShipDist = Infinity;
+    let bestShipDist = Number.POSITIVE_INFINITY;
     for (let i = 0; i < world.ships.length; i += 1) {
       const candidate = world.ships[i];
       if (!candidate || !candidate.alive || candidate.id === this.shipId) continue;
@@ -83,7 +83,7 @@ export class BotController {
 
     let targetX = ARENA.width * 0.5;
     let targetY = ARENA.height * 0.5;
-    let targetDist = Infinity;
+    let targetDist = Number.POSITIVE_INFINITY;
 
     if (target) {
       targetX = target.pos.x;

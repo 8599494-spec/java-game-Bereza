@@ -119,7 +119,9 @@ for (const n of tiers) {
   results.push(res);
 }
 
-console.log('\n| Clients (N) | Tick p50 (ms) | Tick p95 (ms) | Tick p99 (ms) | Event Loop Util | RSS (MB) | Outbound (KB/s) | Budget 33ms |');
+console.log(
+  '\n| Clients (N) | Tick p50 (ms) | Tick p95 (ms) | Tick p99 (ms) | Event Loop Util | RSS (MB) | Outbound (KB/s) | Budget 33ms |',
+);
 console.log('|---:|---:|---:|---:|---:|---:|---:|:---:|');
 for (const r of results) {
   const status = r.tickP99Ms <= 33.3 ? 'OK' : 'EXCEEDED';

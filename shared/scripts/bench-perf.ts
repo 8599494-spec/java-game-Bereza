@@ -1,15 +1,15 @@
 import { performance } from 'node:perf_hooks';
 import {
-  addShipToWorld,
   ARENA,
+  FIXED_DT,
+  type ShipControlInput,
+  addShipToWorld,
   asEntityId,
   asRadians,
   asSeq,
   createWorldState,
-  FIXED_DT,
   mutVec2,
   setVec2,
-  type ShipControlInput,
   stepWorldState,
   vec2,
   wrapDistance,
@@ -62,17 +62,17 @@ function runUnpooledBaselineBench(ticks: number): { elapsedMs: number; heapDelta
   let hits = 0;
 
   for (let t = 0; t < ticks; t += 1) {
-    // Allocate fresh vectors & bullet objects every tick (pre-Lab-07 pattern)
     const transientBullets = Array.from({ length: 32 }, (_, b) => ({
       pos: vec2((b * 29 + t) % ARENA.width, (b * 41 + t) % ARENA.height),
       vel: vec2(300, 150),
     }));
 
-    // O(N^2) all-pairs check
     for (let i = 0; i < transientBullets.length; i += 1) {
-      const b = transientBullets[i]!;
+      const b = transientBullets[i];
+      if (!b) continue;
       for (let j = 0; j < entities.length; j += 1) {
-        const e = entities[j]!;
+        const e = entities[j];
+        if (!e) continue;
         if (wrapDistance(b.pos, e.pos, ARENA) < 20) {
           hits += 1;
         }
@@ -90,7 +90,6 @@ function runUnpooledBaselineBench(ticks: number): { elapsedMs: number; heapDelta
   };
 }
 
-// Warmup JIT
 runSimulationBench(500);
 runUnpooledBaselineBench(500);
 
@@ -98,7 +97,9 @@ const baseline = runUnpooledBaselineBench(4000);
 const optimized = runSimulationBench(4000);
 
 console.log('=== Lab 07 V8 Engine & Memory Benchmark (4,000 ticks, 8 active bots) ===');
-console.log(`Baseline (unpooled new + O(N^2)): ${baseline.elapsedMs} ms | Heap delta: ${baseline.heapDeltaKB} KB`);
+console.log(
+  `Baseline (unpooled new + O(N^2)): ${baseline.elapsedMs} ms | Heap delta: ${baseline.heapDeltaKB} KB`,
+);
 console.log(
   `Optimized (ObjectPool + SpatialHash + MutVec2): ${optimized.elapsedMs} ms | Heap delta: ${optimized.heapDeltaKB} KB | Pool size: ${optimized.poolCreated}`,
 );

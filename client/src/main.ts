@@ -1,20 +1,20 @@
 import {
-  asRoomId,
-  asSeq,
-  asTick,
-  binaryCodec,
   type Codec,
   type CodecKind,
   type EntityId,
   FIXED_DT,
-  getCodec,
   type InputMessage,
-  isDeterminismBugEnabled,
   type RoomId,
   type Seq,
   type SnapshotEntity,
-  setDeterminismBugEnabled,
   type Tick,
+  asRoomId,
+  asSeq,
+  asTick,
+  binaryCodec,
+  getCodec,
+  isDeterminismBugEnabled,
+  setDeterminismBugEnabled,
 } from '@game/shared';
 import { Bus } from './bus.ts';
 import { EntityInterpolator } from './interpolator.ts';

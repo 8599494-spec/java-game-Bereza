@@ -1,17 +1,17 @@
 import { describe, expect, it } from 'vitest';
 import {
+  BINARY_MSG_TYPE,
+  PROTOCOL_VERSION,
   asEntityId,
   asRadians,
   asRoomId,
   asSeq,
   asTick,
-  BINARY_MSG_TYPE,
   binaryCodec,
   decodeSnapshotBinary,
   encodeSnapshotBinary,
   getCodec,
   jsonCodec,
-  PROTOCOL_VERSION,
   vec2,
 } from '../src/index.ts';
 
